@@ -1,0 +1,66 @@
+<html>
+    <head>
+	<title>Canvas</title>
+	<script
+	    src="https://code.jquery.com/jquery-3.2.1.min.js"
+	    integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4="
+	    crossorigin="anonymous"></script>
+	<script type="text/javascript">
+	 var ticks = 0;
+	 var start = 0;
+	 var lst = [];
+
+	 function getMousePos(canvas, evt) {
+	     var rect = canvas.getBoundingClientRect();
+	     return {
+		 x: evt.clientX - rect.left,
+		 y: evt.clientY - rect.top
+	     };
+	 }
+
+	 function draw() {
+	     var layer1 = $("#layer-1").get(0);
+	     var ctx1 = layer1.getContext("2d");
+	     ctx1.clearRect(0, 0, 720, 1280);
+	     ctx1.fillStyle = "#FAF7F8";
+	     ctx1.beginPath();
+	     ctx1.rect(0, 0, 720, 1280);
+	     ctx1.closePath();
+	     ctx1.fill();
+	     ctx1.beginPath();
+	     ctx1.moveTo(0, 0);
+	     for (i = 0; i < lst.length; i++) {
+		 ctx1.lineTo(lst[i].x, lst[i].y);
+	     }
+	     ctx1.stroke();
+	     ticks += 1;
+	     var now = new Date();
+	     var duration = now.getTime() - start;
+	     var fps = ticks / (duration / 1000.0);
+	     if (ticks % 60 == 0) {
+		 console.log(fps);
+	     }
+	     window.requestAnimationFrame(draw);
+	 }
+
+	 function move(event) {
+	     var pos = getMousePos($("#layer-1").get(0), event);
+	     lst.push(pos);
+	 }
+	 
+	 $(document).ready(function () {
+	     var now = new Date();
+	     start = now.getTime();
+	     window.requestAnimationFrame(draw);
+
+	     $("#layer-1").on("mousemove", move);
+	 });
+	</script>
+    </head>
+    <body>
+	<p>Hello there!</p>
+	<canvas id="layer-1" height="1280px" width="720px">
+	    Browser doesn't support canvas! Oops!
+	</canvas>
+    </body>
+</html>
