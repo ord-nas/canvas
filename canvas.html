@@ -6,9 +6,14 @@
 	    integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4="
 	    crossorigin="anonymous"></script>
 	<script type="text/javascript">
-	 var ticks = 0;
-	 var start = 0;
-	 var lst = [];
+	 var strokes = [];
+	 var active_stroke = null;
+	 var recording = true;
+	 var playing = false;
+	 var last_project_time = 0;
+	 var last_real_time = 0;
+	 var last_draw_time = 0;
+	 var current_project_time = 0;
 
 	 function getMousePos(canvas, evt) {
 	     var rect = canvas.getBoundingClientRect();
@@ -18,42 +23,161 @@
 	     };
 	 }
 
+	 function clear(ctx) {
+	     ctx.clearRect(0, 0, 720, 1280);
+	     ctx.fillStyle = "#FAF7F8";
+	     ctx.beginPath();
+	     ctx.rect(0, 0, 720, 1280);
+	     ctx.closePath();
+	     ctx.fill();
+	 }
+	 
+	 function drawPeriod(ctx, start, end) {
+	     var i, j;
+	     for (i = 0; i < strokes.length; i++) {
+		 var stroke = strokes[i];
+		 var stroke_start = stroke.start;
+		 if (stroke_start <= end) {
+		     var started = false;
+		     for (j = 0; j < stroke.pnts.length; j++) {
+			 var pnt = stroke.pnts[j];
+			 var time = stroke_start + pnt.time;
+			 if (time >= start && time <= end) {
+			     if (started) {
+				 ctx.lineTo(pnt.x, pnt.y);
+			     } else {
+				 ctx.beginPath();
+				 ctx.moveTo(pnt.x, pnt.y);
+				 started = true;
+			     }
+			 }
+		     }
+		     if (started) {
+			 ctx.stroke();
+		     }
+		 }
+	     }
+	 }
+	 
+	 function tick() {
+	     set_current_project_time();
+	     console.log(current_project_time);
+	     draw();
+	     if (playing) {
+		 $("#time").val(current_project_time / 1000);
+	     }
+	     window.requestAnimationFrame(tick);
+	 }
+	 
 	 function draw() {
 	     var layer1 = $("#layer-1").get(0);
 	     var ctx1 = layer1.getContext("2d");
-	     ctx1.clearRect(0, 0, 720, 1280);
-	     ctx1.fillStyle = "#FAF7F8";
-	     ctx1.beginPath();
-	     ctx1.rect(0, 0, 720, 1280);
-	     ctx1.closePath();
-	     ctx1.fill();
-	     ctx1.beginPath();
-	     ctx1.moveTo(0, 0);
-	     for (i = 0; i < lst.length; i++) {
-		 ctx1.lineTo(lst[i].x, lst[i].y);
+	     var time = current_project_time;
+	     /* if (time < last_draw_time) {*/
+		 clear(ctx1);
+		 drawPeriod(ctx1, 0, time);
+	     /* } else {
+		drawPeriod(ctx1, last_draw_time, time);
+		}*/
+	     last_draw_time = time;
+	 }
+	 
+	 /* function draw() {
+	    var layer1 = $("#layer-1").get(0);
+	    var ctx1 = layer1.getContext("2d");
+	    ctx1.clearRect(0, 0, 720, 1280);
+	    ctx1.fillStyle = "#FAF7F8";
+	    ctx1.beginPath();
+	    ctx1.rect(0, 0, 720, 1280);
+	    ctx1.closePath();
+	    ctx1.fill();
+	    ctx1.beginPath();
+	    ctx1.moveTo(0, 0);
+	    for (i = 0; i < lst.length; i++) {
+	    ctx1.lineTo(lst[i].x, lst[i].y);
+	    }
+	    ctx1.stroke();
+	    ticks += 1;
+	    var now = new Date();
+	    var duration = now.getTime() - start;
+	    var fps = ticks / (duration / 1000.0);
+	    if (ticks % 60 == 0) {
+	    console.log(fps);
+	    }
+	    window.requestAnimationFrame(draw);
+	    }*/
+
+	 function set_current_project_time() {
+	     current_project_time = last_project_time;
+	     if (playing) {
+		 var now = new Date();
+		 var delta = now.getTime() - last_real_time;
+		 current_project_time += delta;
 	     }
-	     ctx1.stroke();
-	     ticks += 1;
-	     var now = new Date();
-	     var duration = now.getTime() - start;
-	     var fps = ticks / (duration / 1000.0);
-	     if (ticks % 60 == 0) {
-		 console.log(fps);
+	 }
+	 
+	 function mousemove(event) {
+	     if (recording && !(active_stroke === null)) {
+		 var project_time = current_project_time;
+		 var pos = getMousePos($("#layer-1").get(0), event);
+		 var pnt = {
+		     x: pos.x,
+		     y: pos.y,
+		     time: project_time - active_stroke.start,
+		 }
+		 active_stroke.pnts.push(pnt);
 	     }
-	     window.requestAnimationFrame(draw);
 	 }
 
-	 function move(event) {
-	     var pos = getMousePos($("#layer-1").get(0), event);
-	     lst.push(pos);
+	 function mousedown(event) {
+	     if (recording && (active_stroke === null)) {
+		 var pos = getMousePos($("#layer-1").get(0), event);
+		 var start_time = current_project_time;
+		 var stroke = {
+		     start: start_time,
+		     pnts: [],
+		 }
+		 var pnt = {
+		     x: pos.x,
+		     y: pos.y,
+		     time: 0,
+		 }
+		 stroke.pnts.push(pnt);
+		 active_stroke = stroke;
+		 strokes.push(stroke);
+	     }
+	 }
+
+	 function mouseup(event) {
+	     if (recording && !(active_stroke === null)) {
+		 active_stroke = null;
+	     }
+	 }
+
+	 function play() {
+	     var now = new Date();
+	     last_real_time = now.getTime();
+	     playing = true;
+	 }
+
+	 function stop() {
+	     set_current_project_time();
+	     last_project_time = current_project_time;
+	     playing = false;
 	 }
 	 
 	 $(document).ready(function () {
+	     last_project_time = 0;
+	     last_draw_time = 100; /* HACK */
+	     
 	     var now = new Date();
-	     start = now.getTime();
-	     window.requestAnimationFrame(draw);
+	     last_real_time = now.getTime();
 
-	     $("#layer-1").on("mousemove", move);
+	     $("#layer-1").on("mousemove", mousemove);
+	     $("#layer-1").on("mouseup", mouseup);
+	     $("#layer-1").on("mousedown", mousedown);
+
+	     window.requestAnimationFrame(tick);
 	 });
 	</script>
     </head>
