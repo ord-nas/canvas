@@ -7,15 +7,17 @@
 	    crossorigin="anonymous"></script>
 	<script type="text/javascript">
 	 var bucket_size = 1000 * 5;
-	 var strokes = {};
+	 var stroke_buckets = {};
+	 var strokes = [];
 	 var active_stroke = null;
+	 var active_bucket = null;
 	 var recording = true;
 	 var playing = false;
 	 var last_project_time = 0;
 	 var last_real_time = 0;
-	 var last_draw_time = 0;
+	 var last_draw = null;
 	 var current_project_time = 0;
-	 var current_cache = 0;
+	 var current_seq_id = 0;
 
 	 function getMousePos(canvas, evt) {
 	     var rect = canvas.getBoundingClientRect();
@@ -39,6 +41,10 @@
 		 return -1;
 	     } else if (a.time > b.time) {
 		 return 1;
+	     } else if (a.seq_id < b.seq_id) {
+		 return -1;
+	     } else if (a.seq_id > b.seq_id) {
+		 return 1;
 	     } else {
 		 return 0;
 	     }
@@ -49,47 +55,47 @@
 	     var i, j;
 	     for (i = 0; i < bucket.length; i++) {
 		 var stroke = bucket[i];
-		 var last = stroke.pnts[0];
 		 for (j = 1; j < stroke.pnts.length; j++) {
 		     all_strokes.push({
-			 start: last,
+			 start: stroke.pnts[j-1],
 			 end: stroke.pnts[j],
 			 time: stroke.start + stroke.pnts[j].time,
+			 seq_id: stroke.pnts[j].seq_id,
 		     });
-		     last = stroke.pnts[j];
 		 }
 	     }
 	     all_strokes.sort(compare_strokes);
 	     return all_strokes;
 	 }
 	 
-	 var first = true;
-	 
-	 function drawPeriod(ctx, start, end, cache) {
+	 function drawPeriod(ctx, start, end) {
 	     var i, j, bucket;
-	     var start_bucket = Math.floor(start / bucket_size);
-	     var end_bucket = Math.floor(end / bucket_size);
+	     if (typeof start == "number") {
+		 start = {
+		     time: start,
+		     seq_id: 0,
+		 };
+	     }
+	     if (typeof end == "number") {
+		 end = {
+		     time: end,
+		     seq_id: Infinity,
+		 };
+	     }
+	     var start_bucket = Math.floor(start.time / bucket_size);
+	     var end_bucket = Math.floor(end.time / bucket_size);
 	     for (bucket = start_bucket; bucket <= end_bucket; bucket++) {
-		 if (!(bucket in strokes)) {
+		 if (!(bucket in stroke_buckets)) {
 		     continue;
 		 }
-		 var sorted_strokes = sort_strokes(strokes[bucket]);
-		 if (first) {
-		     console.log(sorted_strokes);
-		     first = false;
-		 }
+		 var sorted_strokes = sort_strokes(stroke_buckets[bucket]);
 		 for (i = 0; i < sorted_strokes.length; i++) {
 		     var stroke = sorted_strokes[i];
-		     if (stroke.time >= start && stroke.time <= end) {
-			 if (stroke.time != start || cache === null || stroke.end.cache !== cache) {
-			     ctx.beginPath();
-			     ctx.moveTo(stroke.start.x, stroke.start.y);
-			     ctx.lineTo(stroke.end.x, stroke.end.y);
-			     ctx.stroke();
-			     if (cache !== null) {
-				 stroke.end.cache = cache;
-			     }
-			 }
+		     if (compare_strokes(stroke, start) >= 0 && compare_strokes(stroke, end) <= 0) {
+			 ctx.beginPath();
+			 ctx.moveTo(stroke.start.x, stroke.start.y);
+			 ctx.lineTo(stroke.end.x, stroke.end.y);
+			 ctx.stroke();
 		     }
 		 }
 	     }
@@ -97,7 +103,6 @@
 	 
 	 function tick() {
 	     set_current_project_time();
-	     //console.log(current_project_time);
 	     draw();
 	     if (playing) {
 		 $("#time").val(current_project_time / 1000);
@@ -110,16 +115,18 @@
 	 function draw() {
 	     var layer1 = $("#layer-1").get(0);
 	     var ctx1 = layer1.getContext("2d");
-	     var time = current_project_time;
-	     if (always_clear || time < last_draw_time) {
+	     var now = {
+		 time: current_project_time,
+		 seq_id: current_seq_id,
+	     };
+	     if (always_clear || compare_strokes(now, last_draw) < 0) {
 		 console.log("CLEAR");
 		 clear(ctx1);
-		 current_cache++;
-		 drawPeriod(ctx1, 0, time, current_cache);
+		 drawPeriod(ctx1, 0, now);
 	     } else {
-		 drawPeriod(ctx1, last_draw_time, time, current_cache);
+		 drawPeriod(ctx1, last_draw, now);
 	     }
-	     last_draw_time = time;
+	     last_draw = now;
 	 }
 	 
 	 function set_current_project_time() {
@@ -135,33 +142,21 @@
 	     if (recording && !(active_stroke === null)) {
 		 var project_time = current_project_time;
 		 var bucket = Math.floor(project_time / bucket_size);
-		 var start_bucket = Math.floor(active_stroke.start / bucket_size);
 		 var pos = getMousePos($("#layer-1").get(0), event);
-		 if (bucket != start_bucket) {
-		     next_stroke = {
-			 start: bucket * bucket_size,
-			 pnts: [],
-			 first: active_stroke.first,
-			 next: null,
-		     };
-		     next_stroke.pnts.push({
-			 x: active_stroke.pnts[active_stroke.pnts.length-1].x,
-			 y: active_stroke.pnts[active_stroke.pnts.length-1].y,
-			 time: 0,
-		     });
-		     active_stroke.next = next_stroke;
-		     active_stroke = next_stroke;
-		     if (!(bucket in strokes)) {
-			 strokes[bucket] = [];
-		     }
-		     strokes[bucket].push(active_stroke);
-		 }
 		 var pnt = {
 		     x: pos.x,
 		     y: pos.y,
 		     time: project_time - active_stroke.start,
+		     seq_id: current_seq_id++,
 		 };
 		 active_stroke.pnts.push(pnt);
+		 if (bucket != active_bucket) {
+		     if (!(bucket in stroke_buckets)) {
+			 stroke_buckets[bucket] = [];
+		     }
+		     stroke_buckets[bucket].push(active_stroke);
+		     active_bucket = bucket;
+		 }
 	     }
 	 }
 
@@ -171,46 +166,61 @@
 		 var start_time = current_project_time;
 		 active_stroke = {
 		     start: start_time,
-		     pnts: [],
-		     first: null,
-		     next: null,
+		     pnts: [{
+			 x: pos.x,
+			 y: pos.y,
+			 time: 0,
+			 seq_id: current_seq_id++,
+		     }],
 		 };
-		 active_stroke.first = active_stroke;
-		 var pnt = {
-		     x: pos.x,
-		     y: pos.y,
-		     time: 0,
-		 };
-		 var bucket = Math.floor(start_time / bucket_size);
-		 active_stroke.pnts.push(pnt);
-		 if (!(bucket in strokes)) {
-		     strokes[bucket] = [];
+		 strokes.push(active_stroke);
+		 active_bucket = Math.floor(start_time / bucket_size);
+		 if (!(active_bucket in stroke_buckets)) {
+		     stroke_buckets[active_bucket] = [];
 		 }
-		 strokes[bucket].push(active_stroke);
+		 stroke_buckets[active_bucket].push(active_stroke);
 	     }
 	 }
 
 	 function mouseup(event) {
 	     if (recording && !(active_stroke === null)) {
 		 active_stroke = null;
+		 active_bucket = null;
 	     }
 	 }
 
 	 function play() {
-	     var now = new Date();
-	     last_real_time = now.getTime();
-	     playing = true;
+	     if (!playing) {
+		 var now = new Date();
+		 last_real_time = now.getTime();
+		 playing = true;
+	     }
 	 }
 
 	 function stop() {
-	     set_current_project_time();
-	     last_project_time = current_project_time;
-	     playing = false;
+	     if (playing) {
+		 set_current_project_time();
+		 last_project_time = current_project_time;
+		 playing = false;
+	     }
+	 }
+
+	 function go() {
+	     if (!playing) {
+		 var time = 1000*parseFloat($("#time").val());
+		 if (!isNaN(time)) {
+		     last_project_time = time;
+		 }
+		 $("#time").val(last_project_time / 1000);
+	     }
 	 }
 	 
 	 $(document).ready(function () {
 	     last_project_time = 0;
-	     last_draw_time = 100; /* HACK */
+	     last_draw = {
+		 time: 100,
+		 seq_id: 0,
+	     }; /* HACK */
 	     
 	     var now = new Date();
 	     last_real_time = now.getTime();
@@ -219,12 +229,24 @@
 	     $("#layer-1").on("mouseup", mouseup);
 	     $("#layer-1").on("mousedown", mousedown);
 
+	     $("#play").on("click", play);
+	     $("#stop").on("click", stop);
+	     $("#go").on("click", go);
+
 	     window.requestAnimationFrame(tick);
 	 });
 	</script>
     </head>
     <body>
 	<p>Hello there!</p>
+	<p>Time:
+	    <input type="text" id="time"/>
+	    <button type="button" id="go">Go</button>
+	</p>
+	<p>
+	    <button type="button" id="play">Play</button>
+	    <button type="button" id="stop">Stop</button>
+	</p>
 	<canvas id="layer-1" height="1280px" width="720px">
 	    Browser doesn't support canvas! Oops!
 	</canvas>
