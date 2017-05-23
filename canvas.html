@@ -9,8 +9,8 @@
 	 var bucket_size = 1000 * 5;
 	 var stroke_buckets = {};
 	 var strokes = [];
-	 var active_stroke = null;
-	 var active_bucket = null;
+	 var transform_buckets = {};
+	 var transforms = [];
 	 var recording = true;
 	 var playing = false;
 	 var last_project_time = 0;
@@ -19,15 +19,75 @@
 	 var current_project_time = 0;
 	 var current_seq_id = 0;
 
-	 function getMousePos(canvas, evt) {
-	     var rect = canvas.getBoundingClientRect();
-	     return {
-		 x: evt.clientX - rect.left,
-		 y: evt.clientY - rect.top
-	     };
+	 var svg_element = null;
+	 function getIdentityMatrix() {
+	     return getSVGElement().createSVGMatrix();
+	 }
+	 function getSVGElement() {
+	     if (svg_element === null) {
+		 svg_element= document.createElementNS("http://www.w3.org/2000/svg", "svg");
+	     }
+	     return svg_element;
 	 }
 
-	 function clear(ctx) {
+	 // Based on implementation at: https://stackoverflow.com/questions/7395813/html5-canvas-get-transform-matrix
+	 function addMatrixTrackingToContext(ctx) {
+	     ctx._matrix = getIdentityMatrix();
+	     var prior_proto = ctx.__proto__;
+	     ctx.__proto__ = {
+		 _set_matrix: function(m) {
+		     this._matrix = m;
+		     prior_proto.setTransform.call(this, m.a, m.b, m.c, m.d, m.e, m.f);
+		 },
+		 scale: function(x,y) {
+		     this._set_matrix(this._matrix.scaleNonUniform(x, y));
+		 },
+		 rotate: function(theta) {
+		     this._set_matrix(this._matrix.rotate(theta * 180 / Math.PI));
+		 },
+		 translate: function(x, y) {
+		     this._set_matrix(this._matrix.translate(x, y));
+		 },
+		 transform: function(a, b, c, d, e, f) {
+		     var m = getIdentityMatrix();
+		     m.a = a; m.b = b; m.c = c; m.d = d; m.e = e; m.f = f;
+		     this._set_matrix(this._matrix.multiply(m));
+		 },
+		 resetTransform: function() {
+		     this._set_matrix(getIdentityMatrix());
+		 },
+		 getInverse: function() {
+		     var inv = getIdentityMatrix();
+		     var m = this._matrix;
+		     inv.a = m.d / (m.a*m.d - m.b*m.c);
+		     inv.c = -m.c / (m.a*m.d - m.b*m.c);
+		     inv.e = (m.c*m.f - m.d*m.e) / (m.a*m.d - m.b*m.c);
+		     inv.b = -m.b / (m.a*m.d - m.b*m.c);
+		     inv.d = m.a / (m.a*m.d - m.b*m.c);
+		     inv.f = (m.b*m.e - m.a*m.f) / (m.a*m.d - m.b*m.c);
+		     return inv;
+		 },
+		 __proto__: prior_proto,
+	     };
+	 }
+	 
+	 function getMousePos(canvas, evt, transform) {
+	     if (transform === undefined) {
+		 transform = true;
+	     }
+	     var pnt = getSVGElement().createSVGPoint();
+	     var rect = canvas.getBoundingClientRect();
+	     pnt.x = evt.clientX - rect.left;
+	     pnt.y = evt.clientY - rect.top;
+	     if (transform) {
+		 var inv = canvas.getContext("2d").getInverse();
+		 pnt = pnt.matrixTransform(inv);
+	     }
+	     return pnt;
+	 }
+
+	 function reset(ctx) {
+	     ctx.resetTransform();
 	     ctx.clearRect(0, 0, 720, 1280);
 	     ctx.fillStyle = "#FAF7F8";
 	     ctx.beginPath();
@@ -36,7 +96,7 @@
 	     ctx.fill();
 	 }
 	 
-	 function compare_strokes(a, b) {
+	 function compare_events(a, b) {
 	     if (a.time < b.time) {
 		 return -1;
 	     } else if (a.time > b.time) {
@@ -49,26 +109,18 @@
 		 return 0;
 	     }
 	 }
-	 
-	 function sort_strokes(bucket) {
-	     var all_strokes = [];
-	     var i, j;
+
+	 function extract_events(bucket) {
+	     var all_events = [];
+	     var i;
 	     for (i = 0; i < bucket.length; i++) {
-		 var stroke = bucket[i];
-		 for (j = 1; j < stroke.pnts.length; j++) {
-		     all_strokes.push({
-			 start: stroke.pnts[j-1],
-			 end: stroke.pnts[j],
-			 time: stroke.start + stroke.pnts[j].time,
-			 seq_id: stroke.pnts[j].seq_id,
-		     });
-		 }
+		 bucket[i].push_events_into(all_events);
 	     }
-	     all_strokes.sort(compare_strokes);
-	     return all_strokes;
+	     all_events.sort(compare_events);
+	     return all_events;
 	 }
 	 
-	 function drawPeriod(ctx, start, end) {
+	 function evalPeriod(start, end, buckets, args) {
 	     var i, j, bucket;
 	     if (typeof start == "number") {
 		 start = {
@@ -85,20 +137,28 @@
 	     var start_bucket = Math.floor(start.time / bucket_size);
 	     var end_bucket = Math.floor(end.time / bucket_size);
 	     for (bucket = start_bucket; bucket <= end_bucket; bucket++) {
-		 if (!(bucket in stroke_buckets)) {
+		 if (!(bucket in buckets)) {
 		     continue;
 		 }
-		 var sorted_strokes = sort_strokes(stroke_buckets[bucket]);
-		 for (i = 0; i < sorted_strokes.length; i++) {
-		     var stroke = sorted_strokes[i];
-		     if (compare_strokes(stroke, start) >= 0 && compare_strokes(stroke, end) <= 0) {
-			 ctx.beginPath();
-			 ctx.moveTo(stroke.start.x, stroke.start.y);
-			 ctx.lineTo(stroke.end.x, stroke.end.y);
-			 ctx.stroke();
+		 var events = extract_events(buckets[bucket]);
+		 for (i = 0; i < events.length; i++) {
+		     var event = events[i];
+		     if (event.time >= bucket * bucket_size &&
+			 event.time < (bucket+1) * bucket_size &&
+			 compare_events(event, start) >= 0 &&
+			 compare_events(event, end) <= 0) {
+			 event.eval(args);
 		     }
 		 }
 	     }
+	 }
+
+	 function drawPeriod(ctx, start, end) {
+	     evalPeriod(start, end, stroke_buckets, [ctx]);
+	 }
+
+	 function transformPeriod(ctx, start, end) {
+	     evalPeriod(start, end, transform_buckets, [ctx]);
 	 }
 	 
 	 function tick() {
@@ -110,7 +170,7 @@
 	     window.requestAnimationFrame(tick);
 	 }
 	 
-	 var always_clear = false;
+	 var always_clear = true; // FIXME
 	 
 	 function draw() {
 	     var layer1 = $("#layer-1").get(0);
@@ -119,9 +179,10 @@
 		 time: current_project_time,
 		 seq_id: current_seq_id,
 	     };
-	     if (always_clear || compare_strokes(now, last_draw) < 0) {
+	     if (always_clear || compare_events(now, last_draw) < 0) {
 		 console.log("CLEAR");
-		 clear(ctx1);
+		 reset(ctx1);
+		 transformPeriod(ctx1, 0, now);
 		 drawPeriod(ctx1, 0, now);
 	     } else {
 		 drawPeriod(ctx1, last_draw, now);
@@ -137,58 +198,210 @@
 		 current_project_time += delta;
 	     }
 	 }
+
+	 // STROKE EVENT
+
+	 function StrokeEvent(start, end, time, seq_id) {
+	     this.start = start;
+	     this.end = end;
+	     this.time = time;
+	     this.seq_id = seq_id;
+	 }
+
+	 StrokeEvent.prototype.eval = function(args) {
+	     var ctx = args[0];
+	     ctx.beginPath();
+	     ctx.moveTo(this.start.x, this.start.y);
+	     ctx.lineTo(this.end.x, this.end.y);
+	     ctx.stroke();
+	 }
 	 
-	 function mousemove(event) {
-	     if (recording && !(active_stroke === null)) {
+	 // STROKE
+
+	 function Stroke(start) {
+	     this.start = start;
+	     this.pnts = [];
+	 }
+
+	 Stroke.prototype.push_events_into = function(arr) {
+	     var j;
+	     for (j = 1; j < this.pnts.length; j++) {
+		 arr.push(new StrokeEvent(this.pnts[j-1],
+					  this.pnts[j],
+					  this.start + this.pnts[j].time,
+					  this.pnts[j].seq_id)
+		 );
+	     }
+	 }
+
+	 // TRANSLATE EVENT
+
+	 function TranslateEvent(dx, dy, time, seq_id) {
+	     this.dx = dx;
+	     this.dy = dy;
+	     this.time = time;
+	     this.seq_id = seq_id;
+	 }
+
+	 TranslateEvent.prototype.eval = function(args) {
+	     var ctx = args[0];
+	     ctx.translate(this.dx, this.dy);
+	 }
+	 
+	 // TRANSLATE
+
+	 function Translate(start) {
+	     this.start = start;
+	     this.deltas = [];
+	 }
+
+	 Translate.prototype.push_events_into = function(arr) {
+	     var i;
+	     for (i = 0; i < this.deltas.length; i++) {
+		 arr.push(new TranslateEvent(this.deltas[i].dx,
+					     this.deltas[i].dy,
+					     this.deltas[i].time + this.start,
+					     this.deltas[i].seq_id)
+		 );
+	     }
+	 }
+			 
+	 // PAINT ACTION
+	 
+	 function PaintAction() {
+	     this.active_stroke = null;
+	     this.active_bucket = null;
+	 }
+	 
+	 PaintAction.prototype.mouseup = function(event) {
+	     if (recording && !(this.active_stroke === null)) {
+		 this.active_stroke = null;
+		 this.active_bucket = null;
+	     }
+	 };
+
+	 PaintAction.prototype.mousedown = function(event) {
+	     if (recording && (this.active_stroke === null)) {
+		 var pos = getMousePos($("#layer-1").get(0), event);
+		 var start_time = current_project_time;
+		 this.active_stroke = new Stroke(start_time);
+		 this.active_stroke.pnts.push({
+		     x: pos.x,
+		     y: pos.y,
+		     time: 0,
+		     seq_id: current_seq_id++,
+		 });
+		 strokes.push(this.active_stroke);
+		 this.active_bucket = Math.floor(start_time / bucket_size);
+		 if (!(this.active_bucket in stroke_buckets)) {
+		     stroke_buckets[this.active_bucket] = [];
+		 }
+		 stroke_buckets[this.active_bucket].push(this.active_stroke);
+	     }
+	 };
+	 
+	 PaintAction.prototype.mousemove = function(event) {
+	     if (recording && !(this.active_stroke === null)) {
 		 var project_time = current_project_time;
 		 var bucket = Math.floor(project_time / bucket_size);
 		 var pos = getMousePos($("#layer-1").get(0), event);
 		 var pnt = {
 		     x: pos.x,
 		     y: pos.y,
-		     time: project_time - active_stroke.start,
+		     time: project_time - this.active_stroke.start,
 		     seq_id: current_seq_id++,
 		 };
-		 active_stroke.pnts.push(pnt);
-		 if (bucket != active_bucket) {
+		 this.active_stroke.pnts.push(pnt);
+		 if (bucket != this.active_bucket) {
 		     if (!(bucket in stroke_buckets)) {
 			 stroke_buckets[bucket] = [];
 		     }
-		     stroke_buckets[bucket].push(active_stroke);
-		     active_bucket = bucket;
+		     stroke_buckets[bucket].push(this.active_stroke);
+		     this.active_bucket = bucket;
 		 }
+	     }
+	 };
+
+	 PaintAction.prototype.finish = PaintAction.prototype.mouseup;
+
+	 var paint_action = new PaintAction();
+	 
+	 // TRANSLATE ACTION
+
+	 function TranslateAction() {
+	     this.active_transform = null;
+	     this.active_bucket = null;
+	 }
+	 
+	 TranslateAction.prototype.mouseup = function(event) {
+	     if (recording && !(this.active_transform === null)) {
+		 this.active_transform = null;
+		 this.active_bucket = null;
+		 this.last_pos = null;
+	     }
+	 };
+
+	 TranslateAction.prototype.mousedown = function(event) {
+	     if (recording && (this.active_transform === null)) {
+		 this.last_pos = getMousePos($("#layer-1").get(0), event, false);
+		 var start_time = current_project_time;
+		 this.active_transform = new Translate(start_time);
+		 transforms.push(this.active_transform);
+		 this.active_bucket = Math.floor(start_time / bucket_size);
+		 if (!(this.active_bucket in transform_buckets)) {
+		     transform_buckets[this.active_bucket] = [];
+		 }
+		 transform_buckets[this.active_bucket].push(this.active_transform);
+	     }
+	 };
+	 
+	 TranslateAction.prototype.mousemove = function(event) {
+	     if (recording && !(this.active_transform === null)) {
+		 var project_time = current_project_time;
+		 var bucket = Math.floor(project_time / bucket_size);
+		 var pos = getMousePos($("#layer-1").get(0), event, false);
+		 var delta = {
+		     dx: pos.x - this.last_pos.x,
+		     dy: pos.y - this.last_pos.y,
+		     time: project_time - this.active_transform.start,
+		     seq_id: current_seq_id++,
+		 };
+		 this.active_transform.deltas.push(delta);
+		 if (bucket != this.active_bucket) {
+		     if (!(bucket in transform_buckets)) {
+			 transform_buckets[bucket] = [];
+		     }
+		     transform_buckets[bucket].push(this.active_transform);
+		     this.active_bucket = bucket;
+		 }
+		 this.last_pos = pos;
+	     }
+	 };
+
+	 TranslateAction.prototype.finish = TranslateAction.prototype.mouseup;	
+
+	 var translate_action = new TranslateAction();
+	 
+	 var current_action = paint_action;
+	 
+	 function mouseup(event) {
+	     if (current_action) {
+		 current_action.mouseup(event);
 	     }
 	 }
 
 	 function mousedown(event) {
-	     if (recording && (active_stroke === null)) {
-		 var pos = getMousePos($("#layer-1").get(0), event);
-		 var start_time = current_project_time;
-		 active_stroke = {
-		     start: start_time,
-		     pnts: [{
-			 x: pos.x,
-			 y: pos.y,
-			 time: 0,
-			 seq_id: current_seq_id++,
-		     }],
-		 };
-		 strokes.push(active_stroke);
-		 active_bucket = Math.floor(start_time / bucket_size);
-		 if (!(active_bucket in stroke_buckets)) {
-		     stroke_buckets[active_bucket] = [];
-		 }
-		 stroke_buckets[active_bucket].push(active_stroke);
+	     if (current_action) {
+		 current_action.mousedown(event);
 	     }
 	 }
 
-	 function mouseup(event) {
-	     if (recording && !(active_stroke === null)) {
-		 active_stroke = null;
-		 active_bucket = null;
+	 function mousemove(event) {
+	     if (current_action) {
+		 current_action.mousemove(event);
 	     }
 	 }
-
+	 
 	 function play() {
 	     if (!playing) {
 		 var now = new Date();
@@ -215,6 +428,15 @@
 	     }
 	 }
 	 
+	 function tool_change() {
+	     current_action.finish();
+	     if (this.value == "paint") {
+		 current_action = paint_action;
+	     } else if (this.value == "translate") {
+		 current_action = translate_action;
+	     }
+	 }
+	 
 	 $(document).ready(function () {
 	     last_project_time = 0;
 	     last_draw = {
@@ -233,6 +455,10 @@
 	     $("#stop").on("click", stop);
 	     $("#go").on("click", go);
 
+	     $("input[type=radio][name=tool]").change(tool_change);
+
+	     addMatrixTrackingToContext($("#layer-1").get(0).getContext("2d"));
+
 	     window.requestAnimationFrame(tick);
 	 });
 	</script>
@@ -246,6 +472,10 @@
 	<p>
 	    <button type="button" id="play">Play</button>
 	    <button type="button" id="stop">Stop</button>
+	</p>
+	<p>
+	    <input type="radio" name="tool" value="paint" checked="checked">Paint<br>
+	    <input type="radio" name="tool" value="translate">Translate<br>
 	</p>
 	<canvas id="layer-1" height="1280px" width="720px">
 	    Browser doesn't support canvas! Oops!
