@@ -1,10 +1,12 @@
 <html>
     <head>
 	<title>Canvas</title>
+	<link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
 	<script
 	    src="https://code.jquery.com/jquery-3.2.1.min.js"
 	    integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4="
 	    crossorigin="anonymous"></script>
+	<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
 	<script type="text/javascript">
 	 var bucket_size = 1000 * 5;
 	 var stroke_buckets = {};
@@ -284,13 +286,23 @@
 	     }
 	 }
 
+	 function get_current_colour() {
+	     return $("#stroke_colour").val();
+	 }
+
+	 function get_current_width() {
+	     return $("#stroke_width").slider("value");
+	 }
+	 
 	 // STROKE EVENT
 
-	 function StrokeEvent(start, end, time, seq_id) {
+	 function StrokeEvent(start, end, time, seq_id, colour, width) {
 	     this.start = start;
 	     this.end = end;
 	     this.time = time;
 	     this.seq_id = seq_id;
+	     this.colour = colour;
+	     this.width = width;
 	 }
 
 	 StrokeEvent.prototype.eval = function(args) {
@@ -298,13 +310,17 @@
 	     ctx.beginPath();
 	     ctx.moveTo(this.start.x, this.start.y);
 	     ctx.lineTo(this.end.x, this.end.y);
+	     ctx.lineWidth = this.width;
+	     ctx.strokeStyle = this.colour;
 	     ctx.stroke();
 	 }
 	 
 	 // STROKE
 
-	 function Stroke(start) {
+	 function Stroke(start, colour, width) {
 	     this.start = start;
+	     this.colour = colour;
+	     this.width = width;
 	     this.pnts = [];
 	 }
 
@@ -314,7 +330,9 @@
 		 arr.push(new StrokeEvent(this.pnts[j-1],
 					  this.pnts[j],
 					  this.start + this.pnts[j].time,
-					  this.pnts[j].seq_id)
+					  this.pnts[j].seq_id,
+					  this.colour,
+					  this.width)
 		 );
 	     }
 	 }
@@ -356,12 +374,14 @@
 	 function PaintAction() {
 	     this.active_stroke = null;
 	     this.active_bucket = null;
+	     this.colour = null;
 	 }
 	 
 	 PaintAction.prototype.mouseup = function(event) {
 	     if (this.active_stroke !== null) {
 		 this.active_stroke = null;
 		 this.active_bucket = null;
+		 this.colour = null;
 	     }
 	 };
 
@@ -372,7 +392,9 @@
 		 this.mouse_pos = getMousePos(canvas, event);
 		 var pos = findTransformedPoint(this.mouse_pos, ctx);
 		 var start_time = current_project_time;
-		 this.active_stroke = new Stroke(start_time);
+		 this.active_stroke = new Stroke(start_time,
+						 get_current_colour(),
+						 get_current_width());
 		 this.active_stroke.pnts.push({
 		     x: pos.x,
 		     y: pos.y,
@@ -566,6 +588,13 @@
 
 	     addMatrixTrackingToContext($("#layer-1").get(0).getContext("2d"));
 
+	     $("#stroke_width").slider({
+		 range: "min",
+		 min: 1,
+		 max: 25,
+		 value: 1,
+	     });
+		 
 	     window.requestAnimationFrame(tick);
 	 });
 	</script>
@@ -583,6 +612,12 @@
 	<p>
 	    <input type="radio" name="tool" value="paint" checked="checked">Paint<br>
 	    <input type="radio" name="tool" value="translate">Translate<br>
+	</p>
+	<p>
+	    Stroke colour: <input type="color" id="stroke_colour" value="#ff0000" style="width:200px;">
+	</p>
+	<p>
+	    Stroke width: <span id="stroke_width" style="display:inline-block;width:200px;margin-left:15px"></span>
 	</p>
 	<canvas id="layer-1" height="1280px" width="720px">
 	    Browser doesn't support canvas! Oops!
