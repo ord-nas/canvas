@@ -11,7 +11,6 @@
 	 var strokes = [];
 	 var transform_buckets = {};
 	 var transforms = [];
-	 var recording = true;
 	 var playing = false;
 	 var last_project_time = 0;
 	 var last_real_time = 0;
@@ -277,14 +276,14 @@
 	 }
 	 
 	 PaintAction.prototype.mouseup = function(event) {
-	     if (recording && !(this.active_stroke === null)) {
+	     if (this.active_stroke !== null) {
 		 this.active_stroke = null;
 		 this.active_bucket = null;
 	     }
 	 };
 
 	 PaintAction.prototype.mousedown = function(event) {
-	     if (recording && (this.active_stroke === null)) {
+	     if (this.active_stroke === null) {
 		 var canvas = $("#layer-1").get(0);
 		 var ctx = canvas.getContext("2d");
 		 this.mouse_pos = getMousePos(canvas, event);
@@ -312,7 +311,7 @@
 	 };
 
 	 PaintAction.prototype.tick = function() {
-	     if (recording && !(this.active_stroke === null)) {
+	     if (this.active_stroke !== null) {
 		 var canvas = $("#layer-1").get(0);
 		 var ctx = canvas.getContext("2d");
 		 var pos = findTransformedPoint(this.mouse_pos, ctx);
@@ -352,7 +351,7 @@
 	 }
 	 
 	 TranslateAction.prototype.mouseup = function(event) {
-	     if (recording && !(this.active_transform === null)) {
+	     if (this.active_transform !== null) {
 		 this.active_transform = null;
 		 this.active_bucket = null;
 		 this.last_pos = null;
@@ -360,7 +359,7 @@
 	 };
 
 	 TranslateAction.prototype.mousedown = function(event) {
-	     if (recording && (this.active_transform === null)) {
+	     if (this.active_transform === null) {
 		 this.last_pos = getMousePos($("#layer-1").get(0), event);
 		 var start_time = current_project_time;
 		 this.active_transform = new Translate(start_time);
@@ -374,7 +373,7 @@
 	 };
 	 
 	 TranslateAction.prototype.mousemove = function(event) {
-	     if (recording && !(this.active_transform === null)) {
+	     if (this.active_transform !== null) {
 		 var project_time = current_project_time;
 		 var bucket = Math.floor(project_time / bucket_size);
 		 var pos = getMousePos($("#layer-1").get(0), event);
