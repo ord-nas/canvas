@@ -15,6 +15,7 @@
 	 var last_project_time = 0;
 	 var last_real_time = 0;
 	 var last_draw = null;
+	 var last_transform = null;
 	 var current_project_time = 0;
 	 var current_seq_id = 0;
 
@@ -85,14 +86,16 @@
 	     return svg_pnt.matrixTransform(ctx.getInverse());
 	 }
 
-	 function reset(ctx) {
-	     ctx.resetTransform();
+	 function clear(ctx) {
+	     var m = ctx._matrix;
+	     ctx._set_matrix(getIdentityMatrix());
 	     ctx.clearRect(0, 0, 720, 1280);
 	     ctx.fillStyle = "#FAF7F8";
 	     ctx.beginPath();
 	     ctx.rect(0, 0, 720, 1280);
 	     ctx.closePath();
 	     ctx.fill();
+	     ctx._set_matrix(m);
 	 }
 	 
 	 function compare_events(a, b) {
@@ -121,6 +124,7 @@
 	 
 	 function evalPeriod(start, end, buckets, args) {
 	     var i, j, bucket;
+	     var performed_action = false;
 	     if (typeof start == "number") {
 		 start = {
 		     time: start,
@@ -147,17 +151,19 @@
 			 compare_events(event, start) >= 0 &&
 			 compare_events(event, end) <= 0) {
 			 event.eval(args);
+			 performed_action = true;
 		     }
 		 }
 	     }
+	     return performed_action;
 	 }
 
 	 function drawPeriod(ctx, start, end) {
-	     evalPeriod(start, end, stroke_buckets, [ctx]);
+	     return evalPeriod(start, end, stroke_buckets, [ctx]);
 	 }
 
 	 function transformPeriod(ctx, start, end) {
-	     evalPeriod(start, end, transform_buckets, [ctx]);
+	     return evalPeriod(start, end, transform_buckets, [ctx]);
 	 }
 	 
 	 function tick() {
@@ -167,29 +173,106 @@
 	     set_current_project_time();
 	     draw();
 	     if (playing) {
+		 // TODO: should I just make this part of set_current_project_time?
 		 $("#time").val(current_project_time / 1000);
 	     }
 	     window.requestAnimationFrame(tick);
 	 }
 	 
-	 var always_clear = true; // FIXME
+	 var always_clear = false;
+	 var always_reset_transform = false;
+	 var redraw_on_transform_change = true;
 	 
-	 function draw() {
+	 function standard_draw() {
 	     var layer1 = $("#layer-1").get(0);
 	     var ctx1 = layer1.getContext("2d");
 	     var now = {
 		 time: current_project_time,
 		 seq_id: current_seq_id,
 	     };
-	     if (always_clear || compare_events(now, last_draw) < 0) {
-		 console.log("CLEAR");
-		 reset(ctx1);
+	     var transform_changed = false;
+	     if (always_reset_transform || compare_events(now, last_transform) < 0) {
+		 console.log("RESET TRANSFORM (STANDARD)");
+		 ctx1.resetTransform();
 		 transformPeriod(ctx1, 0, now);
+		 transform_changed = true;
+	     } else  {
+		 transform_changed = transformPeriod(ctx1, last_transform, now);
+	     }
+	     if (always_clear ||
+		 compare_events(now, last_draw) < 0 ||
+		 transform_changed) {
+		 console.log("CLEAR (STANDARD)");
+		 clear(ctx1);
 		 drawPeriod(ctx1, 0, now);
 	     } else {
 		 drawPeriod(ctx1, last_draw, now);
 	     }
 	     last_draw = now;
+	     last_transform = now;
+	     // Do this just to leave temp_canvas in a state that
+	     // post_transform_draw expects.
+	     clear_temp_canvas();
+	 }
+
+	 var temp_canvas = null;
+	 function clear_temp_canvas() {
+	     temp_canvas = null;
+	 }
+	 function reset_temp_canvas() {
+	     var real_canvas = $("#layer-1").get(0);
+	     temp_canvas = document.createElement('canvas');
+	     temp_canvas.width = real_canvas.width;
+	     temp_canvas.height = real_canvas.height;
+	     var ctx = temp_canvas.getContext("2d");
+	     addMatrixTrackingToContext(ctx);
+	     ctx.drawImage(real_canvas, 0, 0);
+	     ctx._set_matrix(real_canvas.getContext("2d")._matrix);
+	 }
+	 function get_temp_canvas() {
+	     if (temp_canvas === null) {
+		 reset_temp_canvas();
+	     }
+	     return temp_canvas;
+	 }
+	 
+	 function post_transform_draw() {
+	     var real_layer1 = $("#layer-1").get(0);
+	     var temp_layer1 = get_temp_canvas();
+	     var real_ctx1 = real_layer1.getContext("2d");
+	     var temp_ctx1 = temp_layer1.getContext("2d");
+	     var now = {
+		 time: current_project_time,
+		 seq_id: current_seq_id,
+	     };
+	     if (compare_events(now, last_draw) < 0) {
+		 console.log("RESET TRANSFORM (POST)");
+		 real_ctx1.resetTransform();
+		 transformPeriod(real_ctx1, 0, now);
+		 console.log("CLEAR (POST)");
+		 clear(real_ctx1);
+		 drawPeriod(real_ctx1, 0, now);
+		 reset_temp_canvas();
+		 last_transform = now;
+	     } else {
+		 drawPeriod(temp_ctx1, last_draw, now);
+		 real_ctx1.resetTransform();
+		 clear(real_ctx1);
+		 transformPeriod(real_ctx1, last_transform, now);
+		 real_ctx1.drawImage(temp_layer1, 0, 0);
+		 // Do this just to leave real_ctx's matrix in a state that
+		 // standard_draw expects.
+		 real_ctx1._set_matrix(temp_ctx1._matrix);
+	     }
+	     last_draw = now;
+	 }
+	 
+	 function draw() {
+	     if (redraw_on_transform_change) {
+		 standard_draw();
+	     } else {
+		 post_transform_draw();
+	     }
 	 }
 	 
 	 function set_current_project_time() {
@@ -355,6 +438,7 @@
 		 this.active_transform = null;
 		 this.active_bucket = null;
 		 this.last_pos = null;
+		 redraw_on_transform_change = true;
 	     }
 	 };
 
@@ -369,6 +453,7 @@
 		     transform_buckets[this.active_bucket] = [];
 		 }
 		 transform_buckets[this.active_bucket].push(this.active_transform);
+		 redraw_on_transform_change = false;
 	     }
 	 };
 	 
@@ -458,6 +543,10 @@
 	 $(document).ready(function () {
 	     last_project_time = 0;
 	     last_draw = {
+		 time: 100,
+		 seq_id: 0,
+	     }; /* HACK */
+	     last_transform = {
 		 time: 100,
 		 seq_id: 0,
 	     }; /* HACK */
