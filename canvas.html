@@ -71,19 +71,19 @@
 	     };
 	 }
 	 
-	 function getMousePos(canvas, evt, transform) {
-	     if (transform === undefined) {
-		 transform = true;
-	     }
-	     var pnt = getSVGElement().createSVGPoint();
+	 function getMousePos(canvas, evt) {
 	     var rect = canvas.getBoundingClientRect();
-	     pnt.x = evt.clientX - rect.left;
-	     pnt.y = evt.clientY - rect.top;
-	     if (transform) {
-		 var inv = canvas.getContext("2d").getInverse();
-		 pnt = pnt.matrixTransform(inv);
-	     }
-	     return pnt;
+	     return {
+		 x: evt.clientX - rect.left,
+		 y: evt.clientY - rect.top,
+	     };
+	 }
+	 
+	 function findTransformedPoint(pnt, ctx) {
+	     var svg_pnt = getSVGElement().createSVGPoint();
+	     svg_pnt.x = pnt.x;
+	     svg_pnt.y = pnt.y;
+	     return svg_pnt.matrixTransform(ctx.getInverse());
 	 }
 
 	 function reset(ctx) {
@@ -162,6 +162,9 @@
 	 }
 	 
 	 function tick() {
+	     if (current_action) {
+		 current_action.tick();
+	     }
 	     set_current_project_time();
 	     draw();
 	     if (playing) {
@@ -282,7 +285,10 @@
 
 	 PaintAction.prototype.mousedown = function(event) {
 	     if (recording && (this.active_stroke === null)) {
-		 var pos = getMousePos($("#layer-1").get(0), event);
+		 var canvas = $("#layer-1").get(0);
+		 var ctx = canvas.getContext("2d");
+		 this.mouse_pos = getMousePos(canvas, event);
+		 var pos = findTransformedPoint(this.mouse_pos, ctx);
 		 var start_time = current_project_time;
 		 this.active_stroke = new Stroke(start_time);
 		 this.active_stroke.pnts.push({
@@ -301,10 +307,21 @@
 	 };
 	 
 	 PaintAction.prototype.mousemove = function(event) {
+	     this.mouse_pos = getMousePos($("#layer-1").get(0), event);
+	     this.tick();
+	 };
+
+	 PaintAction.prototype.tick = function() {
 	     if (recording && !(this.active_stroke === null)) {
+		 var canvas = $("#layer-1").get(0);
+		 var ctx = canvas.getContext("2d");
+		 var pos = findTransformedPoint(this.mouse_pos, ctx);
+		 // If nothing has changed, just break
+		 var last_pos = this.active_stroke.pnts[this.active_stroke.pnts.length-1];
+		 if (last_pos.x == pos.x && last_pos.y == pos.y) {
+		     return;
+		 }
 		 var project_time = current_project_time;
-		 var bucket = Math.floor(project_time / bucket_size);
-		 var pos = getMousePos($("#layer-1").get(0), event);
 		 var pnt = {
 		     x: pos.x,
 		     y: pos.y,
@@ -312,6 +329,7 @@
 		     seq_id: current_seq_id++,
 		 };
 		 this.active_stroke.pnts.push(pnt);
+		 var bucket = Math.floor(project_time / bucket_size);
 		 if (bucket != this.active_bucket) {
 		     if (!(bucket in stroke_buckets)) {
 			 stroke_buckets[bucket] = [];
@@ -343,7 +361,7 @@
 
 	 TranslateAction.prototype.mousedown = function(event) {
 	     if (recording && (this.active_transform === null)) {
-		 this.last_pos = getMousePos($("#layer-1").get(0), event, false);
+		 this.last_pos = getMousePos($("#layer-1").get(0), event);
 		 var start_time = current_project_time;
 		 this.active_transform = new Translate(start_time);
 		 transforms.push(this.active_transform);
@@ -359,7 +377,7 @@
 	     if (recording && !(this.active_transform === null)) {
 		 var project_time = current_project_time;
 		 var bucket = Math.floor(project_time / bucket_size);
-		 var pos = getMousePos($("#layer-1").get(0), event, false);
+		 var pos = getMousePos($("#layer-1").get(0), event);
 		 var delta = {
 		     dx: pos.x - this.last_pos.x,
 		     dy: pos.y - this.last_pos.y,
@@ -378,7 +396,8 @@
 	     }
 	 };
 
-	 TranslateAction.prototype.finish = TranslateAction.prototype.mouseup;	
+	 TranslateAction.prototype.tick = function() { /* do nothing */ }
+	 TranslateAction.prototype.finish = TranslateAction.prototype.mouseup;
 
 	 var translate_action = new TranslateAction();
 	 
