@@ -1,0 +1,16 @@
+* Things layers need to do
+** Contain a reference to canvas
+** Contain a reference to context
+** Support matrix operations (currently monkey-patched onto context):
+*** Set matrix (with context update)
+*** Transform with matrix
+*** Reset transform
+*** Get inverse transform
+** Support drawing
+*** For maximum flexibility, each layer has independent:
+**** last_draw
+**** last_transform
+**** redraw_on_transform_change
+**** temp_canvas
+*** Has strokes & stroke_buckets
+*** Has transforms & transform_buckets
