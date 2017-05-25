@@ -39,6 +39,24 @@
 		 m.f = y;
 		 return m;
 	     },
+	     scaleAbout: function(origin_x, origin_y, sx, sy) {
+		 var s = getIdentityMatrix();
+		 s.a = sx;
+		 s.d = sy;
+		 var t = this.translation(origin_x, origin_y);
+		 var t_inv = this.translation(-origin_x, -origin_y);
+		 return t.multiply(s).multiply(t_inv);
+	     },
+	     rotateAbout: function(origin_x, origin_y, radians) {
+		 var r = getIdentityMatrix();
+		 r.a = Math.cos(radians);
+		 r.b = Math.sin(radians);
+		 r.c = -r.b;
+		 r.d = r.a;
+		 var t = this.translation(origin_x, origin_y);
+		 var t_inv = this.translation(-origin_x, -origin_y);
+		 return t.multiply(r).multiply(t_inv);
+	     },
 	 };
 	 
 	 // Based on implementation at: https://stackoverflow.com/questions/7395813/html5-canvas-get-transform-matrix
@@ -65,7 +83,7 @@
 		     this._set_matrix(this._matrix.multiply(m));
 		 },
 		 transformWithMatrix: function(m) {
-		     this._set_matrix(this._matrix.multiply(m));
+		     this._set_matrix(m.multiply(this._matrix));
 		 },
 		 resetTransform: function() {
 		     this._set_matrix(getIdentityMatrix());
@@ -394,12 +412,13 @@
 
 	 // TRANSFORM ACTION
 
-	 function TransformAction(matrix_fun, uses_guide_point) {
+	 function TransformAction(matrix_fun, uses_guide_point, point_filter) {
 	     // matrix_fun signature:
 	     // matrix_fun(ctx, guide_point, initial_point, last_point, current_point)
 	     this.active_transform = null;
 	     this.active_bucket = null;
 	     this.matrix_fun = matrix_fun;
+	     this.point_filter = point_filter;
 	     this.uses_guide_point = uses_guide_point;
 	     
 	     this.guide_point = null;
@@ -423,16 +442,24 @@
 	     if (this.active_transform === null) {
 		 if (event.which === 1) {
 		     // If we need a guide point, check that we have one
-		     if (!(this.uses_guide_point && this.guide_point === null)) {
-			 this.initial_point = getMousePos($("#layer-1").get(0), event);
-			 this.current_point = this.initial_point;
-			 var start_time = current_project_time;
-			 this.active_transform = new Transform(start_time);
-			 transforms.push(this.active_transform);
-			 this.active_bucket = Math.floor(start_time / bucket_size);
-			 addToBucket(transform_buckets, this.active_bucket, this.active_transform);
-			 redraw_on_transform_change = false;
+		     if (this.uses_guide_point && this.guide_point === null) {
+			 return;
 		     }
+
+		     // Check if we pass the point filter
+		     var pnt = getMousePos($("#layer-1").get(0), event)
+		     if (this.point_filter && !this.point_filter(this.guide_point, pnt)) {
+			 return;
+		     }
+		     
+		     this.initial_point = pnt;
+		     this.current_point = this.initial_point;
+		     var start_time = current_project_time;
+		     this.active_transform = new Transform(start_time);
+		     transforms.push(this.active_transform);
+		     this.active_bucket = Math.floor(start_time / bucket_size);
+		     addToBucket(transform_buckets, this.active_bucket, this.active_transform);
+		     redraw_on_transform_change = false;
 		 } else if (event.which === 3 && this.uses_guide_point) {
 		     this.guide_point = getMousePos($("#layer-1").get(0), event);
 		     var overlay = $("#tool-overlay").get(0);
@@ -448,12 +475,19 @@
 	 
 	 TransformAction.prototype.mousemove = function(event) {
 	     if (this.active_transform !== null) {
+		 var canvas = $("#layer-1").get(0);
+		 var pnt = getMousePos(canvas, event);
+
+		 // Check if we pass the point filter
+		 if (this.point_filter && !this.point_filter(this.guide_point, pnt)) {
+		     return;
+		 }
+		 
 		 var project_time = current_project_time;
 		 var bucket = Math.floor(project_time / bucket_size);
-		 var canvas = $("#layer-1").get(0);
 		 var ctx = canvas.getContext("2d");
 		 this.last_point = this.current_point;
-		 this.current_point = getMousePos(canvas, event);
+		 this.current_point = pnt;
 		 var delta = {
 		     m: this.matrix_fun(ctx,
 					this.guide_point,
@@ -572,15 +606,80 @@
 	     };
 	 }
 
+	 function ScaleMaker(allow_x_scale, allow_y_scale, safety_margin) {
+	     if (safety_margin === undefined) {
+		 safety_margin = 5;
+	     }
+	     var matrix_function = function(ctx, guide_point, initial_point, last_point, current_point) {
+		 var sx = allow_x_scale
+			? (current_point.x - guide_point.x) / (last_point.x - guide_point.x)
+			: 1;
+		 var sy = allow_y_scale
+			? (current_point.y - guide_point.y) / (last_point.y - guide_point.y)
+			: 1;
+		 return matrixMaker.scaleAbout(guide_point.x, guide_point.y, sx, sy);
+	     };
+	     var filter_function = function(guide, pnt) {
+		 if (Math.abs(guide.x - pnt.x) < safety_margin && allow_x_scale) {
+		     return false;
+		 } else if (Math.abs(guide.y - pnt.y) < safety_margin && allow_y_scale) {
+		     return false;
+		 } else {
+		     return true;
+		 }
+	     };
+	     return [matrix_function, filter_function];
+	 }
+
+	 function distance(p1, p2) {
+	     var dx = p1.x - p2.x;
+	     var dy = p1.y - p2.y;
+	     return Math.sqrt(dx*dx + dy*dy);
+	 }
+	 
+	 function RotationAndUniformScaleMaker(allow_rotation, allow_uniform_scale, safety_margin) {
+	     if (safety_margin === undefined) {
+		 safety_margin = 5;
+	     }
+	     var matrix_function = function(ctx, guide_point, initial_point, last_point, current_point) {
+		 var current_d = distance(guide_point, current_point);
+		 var last_d = distance(guide_point, last_point);
+		 var s = allow_uniform_scale ? (current_d / last_d) : 1;
+		 var current_r = Math.atan2(current_point.y - guide_point.y, current_point.x - guide_point.x);
+		 var last_r = Math.atan2(last_point.y - guide_point.y, last_point.x - guide_point.x);
+		 var r = allow_rotation ? (current_r - last_r) : 0;
+		 
+		 var scale_matrix = matrixMaker.scaleAbout(guide_point.x, guide_point.y, s, s);
+		 var rotation_matrix = matrixMaker.rotateAbout(guide_point.x, guide_point.y, r);
+		 return scale_matrix.multiply(rotation_matrix);
+	     };
+	     var filter_function = function(guide, pnt) {
+		 return (distance(guide, pnt) >= safety_margin);
+	     };
+	     return [matrix_function, filter_function];
+	 }
+
 	 free_translation = TranslationMaker(true, true);
 	 horizontal_translation = TranslationMaker(true, false);
 	 vertical_translation = TranslationMaker(false, true);
+	 [free_scale, free_scale_filter] = ScaleMaker(true, true);
+	 [horizontal_scale, horizontal_scale_filter] = ScaleMaker(true, false);
+	 [vertical_scale, vertical_scale_filter] = ScaleMaker(false, true);
+	 [rotation, rotation_filter] = RotationAndUniformScaleMaker(true, false);
+	 [uniform_scale, uniform_scale_filter] = RotationAndUniformScaleMaker(false, true);
+	 [rotate_and_scale, rotate_and_scale_filter] = RotationAndUniformScaleMaker(true, true);
 
 	 var actions = [
 	     {key: "paint", title: "Paint", tool: new PaintAction()},
-	     {key: "translate", title: "Translate", tool: new TransformAction(free_translation, false)},
-	     {key: "htranslate", title: "Horizontal Translate", tool: new TransformAction(horizontal_translation, false)},
-	     {key: "vtranslate", title: "Vertical Translate", tool: new TransformAction(vertical_translation, false)},
+	     {key: "translate", title: "Translate", tool: new TransformAction(free_translation)},
+	     {key: "htranslate", title: "Horizontal Translate", tool: new TransformAction(horizontal_translation)},
+	     {key: "vtranslate", title: "Vertical Translate", tool: new TransformAction(vertical_translation)},
+	     {key: "scale", title: "Nonuniform Scale", tool: new TransformAction(free_scale, true, free_scale_filter)},
+	     {key: "hscale", title: "Horizontal Scale", tool: new TransformAction(horizontal_scale, true, horizontal_scale_filter)},
+	     {key: "vscale", title: "Vertical Scale", tool: new TransformAction(vertical_scale, true, vertical_scale_filter)},
+	     {key: "rotate", title: "Rotation", tool: new TransformAction(rotation, true, rotation_filter)},
+	     {key: "uscale", title: "Uniform Scale", tool: new TransformAction(uniform_scale, true, uniform_scale_filter)},
+	     {key: "rotate_and_scale", title: "Rotation and Scale", tool: new TransformAction(rotate_and_scale, true, rotate_and_scale_filter)},
 	 ];
 	 var current_action = null;
 	 
