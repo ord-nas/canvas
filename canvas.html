@@ -564,8 +564,6 @@
 	 PaintAction.prototype.finish = PaintAction.prototype.mouseup;
 	 PaintAction.prototype.start = function() { /* do nothing */ };
 
-	 var paint_action = new PaintAction();
-	 
 	 function TranslationMaker(allow_x_motion, allow_y_motion) {
 	     return function(ctx, guide_point, initial_point, last_point, current_point) {
 		 var dx = allow_x_motion ? current_point.x - last_point.x : 0;
@@ -578,9 +576,13 @@
 	 horizontal_translation = TranslationMaker(true, false);
 	 vertical_translation = TranslationMaker(false, true);
 
-	 var translate_action = new TransformAction(free_translation, false);/*new TranslateAction();*/
-	 
-	 var current_action = paint_action;
+	 var actions = [
+	     {key: "paint", title: "Paint", tool: new PaintAction()},
+	     {key: "translate", title: "Translate", tool: new TransformAction(free_translation, false)},
+	     {key: "htranslate", title: "Horizontal Translate", tool: new TransformAction(horizontal_translation, false)},
+	     {key: "vtranslate", title: "Vertical Translate", tool: new TransformAction(vertical_translation, false)},
+	 ];
+	 var current_action = null;
 	 
 	 function mouseup(event) {
 	     if (current_action) {
@@ -630,13 +632,15 @@
 	 }
 	 
 	 function tool_change() {
-	     current_action.finish();
-	     if (this.value == "paint") {
-		 current_action = paint_action;
-	     } else if (this.value == "translate") {
-		 current_action = translate_action;
+	     if (current_action) current_action.finish();
+	     var i;
+	     for (i = 0; i < actions.length; i++) {
+		 if (actions[i].key == this.value) {
+		     current_action = actions[i].tool;
+		     break;
+		 }
 	     }
-	     current_action.start();
+	     if (current_action) current_action.start();
 	 }
 	 
 	 $(document).ready(function () {
@@ -661,8 +665,17 @@
 	     $("#stop").on("click", stop);
 	     $("#go").on("click", go);
 
+	     var i;
+	     for (i = 0; i < actions.length; i++) {
+		 $("<input type='radio' name='tool'>")
+		     .attr("value", actions[i].key)
+		     .appendTo($("#tool_set"));
+		 $("#tool_set").append(document.createTextNode(actions[i].title));
+	     }
+	     $("#tool_set input:first-child").attr("checked", "checked");
 	     $("input[type=radio][name=tool]").change(tool_change);
-
+	     $("input[type=radio][name=tool]:checked").change();
+	     
 	     addMatrixTrackingToContext($("#layer-1").get(0).getContext("2d"));
 
 	     $("#stroke_width").slider({
@@ -686,10 +699,7 @@
 	    <button type="button" id="play">Play</button>
 	    <button type="button" id="stop">Stop</button>
 	</p>
-	<p>
-	    <input type="radio" name="tool" value="paint" checked="checked">Paint<br>
-	    <input type="radio" name="tool" value="translate">Translate<br>
-	</p>
+	<p id="tool_set"></p>
 	<p>
 	    Stroke colour: <input type="color" id="stroke_colour" value="#ff0000" style="width:200px;">
 	</p>
