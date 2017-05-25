@@ -387,7 +387,7 @@
 	 };
 
 	 PaintAction.prototype.mousedown = function(event) {
-	     if (this.active_stroke === null) {
+	     if (this.active_stroke === null && event.which === 1) {
 		 var canvas = $("#layer-1").get(0);
 		 var ctx = canvas.getContext("2d");
 		 this.mouse_pos = getMousePos(canvas, event);
@@ -466,7 +466,7 @@
 	 };
 
 	 TranslateAction.prototype.mousedown = function(event) {
-	     if (this.active_transform === null) {
+	     if (this.active_transform === null && event.which === 1) {
 		 this.last_pos = getMousePos($("#layer-1").get(0), event);
 		 var start_time = current_project_time;
 		 this.active_transform = new Translate(start_time);
@@ -577,9 +577,9 @@
 	     var now = new Date();
 	     last_real_time = now.getTime();
 
-	     $("#layer-1").on("mousemove", mousemove);
-	     $("#layer-1").on("mouseup", mouseup);
-	     $("#layer-1").on("mousedown", mousedown);
+	     $("#tool-overlay").on("mousemove", mousemove);
+	     $("#tool-overlay").on("mouseup", mouseup);
+	     $("#tool-overlay").on("mousedown", mousedown);
 
 	     $("#play").on("click", play);
 	     $("#stop").on("click", stop);
@@ -620,8 +620,13 @@
 	<p>
 	    Stroke width: <span id="stroke_width" style="display:inline-block;width:200px;margin-left:15px"></span>
 	</p>
-	<canvas id="layer-1" height="1280px" width="720px">
-	    Browser doesn't support canvas! Oops!
-	</canvas>
+	<div style="position:relative">
+	    <canvas id="layer-1" height="1280px" width="720px" style="z-index:1;position:absolute;left:0px;top:0px">
+		Browser doesn't support canvas! Oops!
+	    </canvas>
+	    <canvas id="tool-overlay" height="1280px" width="720px" style="z-index:2;position:absolute;left:0px;top:0px">
+		Browser doesn't support canvas! Oops!
+	    </canvas>
+	</div>
     </body>
 </html>
