@@ -32,6 +32,15 @@
 	     return svg_element;
 	 }
 
+	 var matrixMaker = {
+	     translation: function(x, y) {
+		 var m = getIdentityMatrix();
+		 m.e = x;
+		 m.f = y;
+		 return m;
+	     },
+	 };
+	 
 	 // Based on implementation at: https://stackoverflow.com/questions/7395813/html5-canvas-get-transform-matrix
 	 function addMatrixTrackingToContext(ctx) {
 	     ctx._matrix = getIdentityMatrix();
@@ -55,6 +64,9 @@
 		     m.a = a; m.b = b; m.c = c; m.d = d; m.e = e; m.f = f;
 		     this._set_matrix(this._matrix.multiply(m));
 		 },
+		 transformWithMatrix: function(m) {
+		     this._set_matrix(this._matrix.multiply(m));
+		 },
 		 resetTransform: function() {
 		     this._set_matrix(getIdentityMatrix());
 		 },
@@ -73,6 +85,13 @@
 	     };
 	 }
 	 
+	 function addToBucket(buckets, index, item) {
+	     if (!(index in buckets)) {
+		 buckets[index] = [];
+	     }
+	     buckets[index].push(item);
+	 }
+	 
 	 function getMousePos(canvas, evt) {
 	     var rect = canvas.getBoundingClientRect();
 	     return {
@@ -85,7 +104,17 @@
 	     var svg_pnt = getSVGElement().createSVGPoint();
 	     svg_pnt.x = pnt.x;
 	     svg_pnt.y = pnt.y;
-	     return svg_pnt.matrixTransform(ctx.getInverse());
+	     // TODO: It's annoying that we have to do this ...
+	     var old_m = ctx._matrix;
+	     var now = {
+		 time: current_project_time,
+		 seq_id: current_seq_id,
+	     };
+	     transformPeriod(ctx, last_transform, now);
+	     svg_pnt = svg_pnt.matrixTransform(ctx.getInverse());
+	     ctx._set_matrix(old_m);
+	     // END ANNOYING
+	     return svg_pnt;
 	 }
 
 	 function clear(ctx) {
@@ -338,37 +367,130 @@
 	     }
 	 }
 
-	 // TRANSLATE EVENT
-
-	 function TranslateEvent(dx, dy, time, seq_id) {
-	     this.dx = dx;
-	     this.dy = dy;
-	     this.time = time;
-	     this.seq_id = seq_id;
-	 }
-
-	 TranslateEvent.prototype.eval = function(args) {
-	     var ctx = args[0];
-	     ctx.translate(this.dx, this.dy);
-	 }
 	 
-	 // TRANSLATE
+	 // TRANSFORM
 
-	 function Translate(start) {
+	 function Transform(start) {
 	     this.start = start;
 	     this.deltas = [];
 	 }
 
-	 Translate.prototype.push_events_into = function(arr) {
+	 function TransformEval(args) {
+	     var ctx = args[0];
+	     ctx.transformWithMatrix(this.m);
+	 }
+
+	 Transform.prototype.push_events_into = function(arr) {
 	     var i;
 	     for (i = 0; i < this.deltas.length; i++) {
-		 arr.push(new TranslateEvent(this.deltas[i].dx,
-					     this.deltas[i].dy,
-					     this.deltas[i].time + this.start,
-					     this.deltas[i].seq_id)
-		 );
+		 arr.push({
+		     m: this.deltas[i].m,
+		     time: this.deltas[i].time + this.start,
+		     seq_id: this.deltas[i].seq_id,
+		     eval: TransformEval,
+		 });
 	     }
 	 }
+
+	 // TRANSFORM ACTION
+
+	 function TransformAction(matrix_fun, uses_guide_point) {
+	     // matrix_fun signature:
+	     // matrix_fun(ctx, guide_point, initial_point, last_point, current_point)
+	     this.active_transform = null;
+	     this.active_bucket = null;
+	     this.matrix_fun = matrix_fun;
+	     this.uses_guide_point = uses_guide_point;
+	     
+	     this.guide_point = null;
+	     this.initial_point = null;
+	     this.last_point = null;
+	     this.current_point = null;
+	 }
+	 
+	 TransformAction.prototype.mouseup = function(event) {
+	     if (this.active_transform !== null) {
+		 this.active_transform = null;
+		 this.active_bucket = null;
+		 this.initial_point = null;
+		 this.last_point = null;
+		 this.current_point = null;
+		 redraw_on_transform_change = true;
+	     }
+	 };
+
+	 TransformAction.prototype.mousedown = function(event) {
+	     if (this.active_transform === null) {
+		 if (event.which === 1) {
+		     // If we need a guide point, check that we have one
+		     if (!(this.uses_guide_point && this.guide_point === null)) {
+			 this.initial_point = getMousePos($("#layer-1").get(0), event);
+			 this.current_point = this.initial_point;
+			 var start_time = current_project_time;
+			 this.active_transform = new Transform(start_time);
+			 transforms.push(this.active_transform);
+			 this.active_bucket = Math.floor(start_time / bucket_size);
+			 addToBucket(transform_buckets, this.active_bucket, this.active_transform);
+			 redraw_on_transform_change = false;
+		     }
+		 } else if (event.which === 3 && this.uses_guide_point) {
+		     this.guide_point = getMousePos($("#layer-1").get(0), event);
+		     var overlay = $("#tool-overlay").get(0);
+		     var ctx = overlay.getContext("2d");
+		     ctx.clearRect(0, 0, 720, 1280);
+		     ctx.beginPath();
+		     ctx.arc(this.guide_point.x, this.guide_point.y, 5, 0, 2 * Math.PI);
+		     ctx.fillStyle = "#FF0000";
+		     ctx.fill();
+		 }
+	     }
+	 };
+	 
+	 TransformAction.prototype.mousemove = function(event) {
+	     if (this.active_transform !== null) {
+		 var project_time = current_project_time;
+		 var bucket = Math.floor(project_time / bucket_size);
+		 var canvas = $("#layer-1").get(0);
+		 var ctx = canvas.getContext("2d");
+		 this.last_point = this.current_point;
+		 this.current_point = getMousePos(canvas, event);
+		 var delta = {
+		     m: this.matrix_fun(ctx,
+					this.guide_point,
+					this.initial_point,
+					this.last_point,
+					this.current_point),
+		     time: project_time - this.active_transform.start,
+		     seq_id: current_seq_id++,
+		 };
+		 this.active_transform.deltas.push(delta);
+		 if (bucket != this.active_bucket) {
+		     addToBucket(transform_buckets, bucket, this.active_transform);
+		     this.active_bucket = bucket;
+		 }
+	     }
+	 };
+
+	 TransformAction.prototype.finish = function() {
+	     this.mouseup();
+	     var overlay = $("#tool-overlay").get(0);
+	     var ctx = overlay.getContext("2d");
+	     ctx.clearRect(0, 0, 720, 1280);
+	     $("#tool-overlay").off("contextmenu");
+	 }
+	 
+	 TransformAction.prototype.start = function() {
+	     $("#tool-overlay").on("contextmenu", function(event) {
+		 event.preventDefault();
+	     });
+	     this.guide_point = null;
+	     this.initial_point = null;
+	     this.last_point = null;
+	     this.current_point = null;
+	 }
+	 
+	 TransformAction.prototype.tick = function() { /* do nothing */ }
+
 			 
 	 // PAINT ACTION
 	 
@@ -404,10 +526,7 @@
 		 });
 		 strokes.push(this.active_stroke);
 		 this.active_bucket = Math.floor(start_time / bucket_size);
-		 if (!(this.active_bucket in stroke_buckets)) {
-		     stroke_buckets[this.active_bucket] = [];
-		 }
-		 stroke_buckets[this.active_bucket].push(this.active_stroke);
+		 addToBucket(stroke_buckets, this.active_bucket, this.active_stroke);
 	     }
 	 };
 	 
@@ -436,94 +555,50 @@
 		 this.active_stroke.pnts.push(pnt);
 		 var bucket = Math.floor(project_time / bucket_size);
 		 if (bucket != this.active_bucket) {
-		     if (!(bucket in stroke_buckets)) {
-			 stroke_buckets[bucket] = [];
-		     }
-		     stroke_buckets[bucket].push(this.active_stroke);
+		     addToBucket(stroke_buckets, bucket, this.active_stroke);
 		     this.active_bucket = bucket;
 		 }
 	     }
 	 };
 
 	 PaintAction.prototype.finish = PaintAction.prototype.mouseup;
+	 PaintAction.prototype.start = function() { /* do nothing */ };
 
 	 var paint_action = new PaintAction();
 	 
-	 // TRANSLATE ACTION
-
-	 function TranslateAction() {
-	     this.active_transform = null;
-	     this.active_bucket = null;
+	 function TranslationMaker(allow_x_motion, allow_y_motion) {
+	     return function(ctx, guide_point, initial_point, last_point, current_point) {
+		 var dx = allow_x_motion ? current_point.x - last_point.x : 0;
+		 var dy = allow_y_motion ? current_point.y - last_point.y: 0;
+		 return matrixMaker.translation(dx, dy);
+	     };
 	 }
-	 
-	 TranslateAction.prototype.mouseup = function(event) {
-	     if (this.active_transform !== null) {
-		 this.active_transform = null;
-		 this.active_bucket = null;
-		 this.last_pos = null;
-		 redraw_on_transform_change = true;
-	     }
-	 };
 
-	 TranslateAction.prototype.mousedown = function(event) {
-	     if (this.active_transform === null && event.which === 1) {
-		 this.last_pos = getMousePos($("#layer-1").get(0), event);
-		 var start_time = current_project_time;
-		 this.active_transform = new Translate(start_time);
-		 transforms.push(this.active_transform);
-		 this.active_bucket = Math.floor(start_time / bucket_size);
-		 if (!(this.active_bucket in transform_buckets)) {
-		     transform_buckets[this.active_bucket] = [];
-		 }
-		 transform_buckets[this.active_bucket].push(this.active_transform);
-		 redraw_on_transform_change = false;
-	     }
-	 };
-	 
-	 TranslateAction.prototype.mousemove = function(event) {
-	     if (this.active_transform !== null) {
-		 var project_time = current_project_time;
-		 var bucket = Math.floor(project_time / bucket_size);
-		 var pos = getMousePos($("#layer-1").get(0), event);
-		 var delta = {
-		     dx: pos.x - this.last_pos.x,
-		     dy: pos.y - this.last_pos.y,
-		     time: project_time - this.active_transform.start,
-		     seq_id: current_seq_id++,
-		 };
-		 this.active_transform.deltas.push(delta);
-		 if (bucket != this.active_bucket) {
-		     if (!(bucket in transform_buckets)) {
-			 transform_buckets[bucket] = [];
-		     }
-		     transform_buckets[bucket].push(this.active_transform);
-		     this.active_bucket = bucket;
-		 }
-		 this.last_pos = pos;
-	     }
-	 };
+	 free_translation = TranslationMaker(true, true);
+	 horizontal_translation = TranslationMaker(true, false);
+	 vertical_translation = TranslationMaker(false, true);
 
-	 TranslateAction.prototype.tick = function() { /* do nothing */ }
-	 TranslateAction.prototype.finish = TranslateAction.prototype.mouseup;
-
-	 var translate_action = new TranslateAction();
+	 var translate_action = new TransformAction(free_translation, false);/*new TranslateAction();*/
 	 
 	 var current_action = paint_action;
 	 
 	 function mouseup(event) {
 	     if (current_action) {
+		 set_current_project_time();
 		 current_action.mouseup(event);
 	     }
 	 }
 
 	 function mousedown(event) {
 	     if (current_action) {
+		 set_current_project_time();
 		 current_action.mousedown(event);
 	     }
 	 }
 
 	 function mousemove(event) {
 	     if (current_action) {
+		 set_current_project_time();
 		 current_action.mousemove(event);
 	     }
 	 }
@@ -561,6 +636,7 @@
 	     } else if (this.value == "translate") {
 		 current_action = translate_action;
 	     }
+	     current_action.start();
 	 }
 	 
 	 $(document).ready(function () {
