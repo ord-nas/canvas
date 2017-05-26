@@ -18,3 +18,35 @@
 *** DONE Has strokes & stroke_buckets
 *** DONE Has transforms & transform_buckets
 *** DONE Draw takes a layer as argument
+* Multiple layers
+** TODO Add layer stack
+** TODO Draw all layers on tick
+** TODO Figure out whether to set redraw_on_transform_change for all layers simultaneously
+** Allow layers to be:
+*** TODO Added
+*** TODO Removed
+*** TODO Reordered
+* New tools
+** TODO Eraser
+** Line
+*** TODO Free
+*** TODO Snap to horizontal/vertical/45-degree(?)
+** TODO Circle
+** TODO Rectangle
+** TODO Table?
+** TODO Polygon?
+** TODO Paintbucket
+* Performance
+** TODO Profile the drawing function (especially when it needs to redraw every frame)
+** TODO Switch to using redraw_on_transform_change = false more often
+*** Whenever a period of transformation begins / ends?
+*** Always? Redraw in background, and use stale pictures in foreground?
+**** DONE Investigate redrawing using Web Workers
+***** Not available in Chrome yet! (https://bugs.chromium.org/p/chromium/issues/detail?id=563816)
+**** TODO Investigate interleaving of transforming stale & redrawing
+* Refactoring
+** TODO Refactor evalPeriod to take a function, apply it to each event
+*** Use closures to support additional arguments
+*** Transform events don't need to have an eval method, just expose the matrix
+*** TODO Ensure this doesn't degrade performance
+** TODO Try to fix the annoying hack in findTransformedPoint
