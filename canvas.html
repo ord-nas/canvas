@@ -245,10 +245,10 @@
 	 }
 	 
 	 function tick() {
+	     set_current_project_time();
 	     if (current_action) {
 		 current_action.tick();
 	     }
-	     set_current_project_time();
 	     draw(layer1); // HACK
 	     if (playing) {
 		 // TODO: should I just make this part of set_current_project_time?
