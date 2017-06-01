@@ -7,6 +7,12 @@
 	    integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4="
 	    crossorigin="anonymous"></script>
 	<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+	<style>
+	 #layer_selector { list-style-type: none; margin: 0; padding: 0; width: 60%; }
+	 #layer_selector li { margin: 0 3px 3px 3px; padding: 0.4em; padding-left: 1.5em; font-size: 1.4em; height: 18px; }
+	 #layer_selector li span { position: absolute; margin-left: -1.3em; }
+	 .ui-draggable, .ui-droppable { background-position: top; }
+	</style>
 	<script type="text/javascript">
 	 var bucket_size = 1000 * 5;
 	 var playing = false;
@@ -14,8 +20,6 @@
 	 var last_real_time = 0;
 	 var current_project_time = 0;
 	 var current_seq_id = 0;
-	 var layer1 = null;
-	 var current_layer = null;
 
 	 var svg_element = null;
 	 function getIdentityMatrix() {
@@ -87,8 +91,10 @@
 	 
 	 // START LAYER DEFINITION
 
-	 function Layer(canvas) {
+	 function Layer(canvas, title, key) {
 	     this.canvas = canvas;
+	     this.title = title;
+	     this.key = key;
 	     this.ctx = canvas.getContext("2d");
 	     addMatrixTrackingToContext(this.ctx);
 
@@ -249,7 +255,10 @@
 	     if (current_action) {
 		 current_action.tick();
 	     }
-	     draw(layer1); // HACK
+	     var i;
+	     for (i = 0; i < layers.length; i++) {
+		 draw(layers[i]);
+	     }
 	     if (playing) {
 		 // TODO: should I just make this part of set_current_project_time?
 		 $("#time").val(current_project_time / 1000);
@@ -685,6 +694,64 @@
 	     {key: "rotate_and_scale", title: "Rotation and Scale", tool: new TransformAction(rotate_and_scale, true, rotate_and_scale_filter)},
 	 ];
 	 var current_action = null;
+
+	 var layers = [];
+	 var current_layer = null;
+
+	 function update_layers() {
+	     var layer_handles = $("#layer_selector li input");
+	     var in_order = [];
+	     var i;
+
+	     // Re-sort layers based on the order of the layer handles
+	     for (i = 0; i < layer_handles.length; i++) {
+		 var index = layers.findIndex(function(e) {
+		     return e.key === layer_handles.eq(i).attr("value");
+		 });
+		 if (index !== -1) {
+		     in_order.push(layers[index]);
+		     layers.splice(index, 1);
+		 } else {
+		     layer_handles.parent().eq(i).remove();
+		 }
+	     }
+
+	     // Add new layers to the handle list
+	     for (i = 0; i < layers.length; i++) {
+		 var element = $('<li class="ui-state-default"><span class="ui-icon ui-icon-arrowthick-2-n-s"></span></li>');
+		 $("<input type='radio' name='layer_handle'>")
+		     .attr("value", layers[i].key)
+		     .appendTo(element)
+		     .change(update_layers);
+		 element.append(document.createTextNode(layers[i].title));
+		 element.appendTo($("#layer_selector"));
+	     }
+
+	     layers = in_order.concat(layers);
+
+	     // Reorder the actual canvas elements
+	     for (i = 0; i < layers.length; i++) {
+		 $(layers[i].canvas).css("z-index", layers.length-i);
+	     }
+
+	     // If no element is selected, select the first one
+	     var selected = $("#layer_selector li input:checked");
+	     if (selected.length === 0) {
+		 $("#layer_selector li:first-child input").attr("checked", "checked");
+	     }
+
+	     // Set the current layer based on the selected
+	     current_layer = null;
+	     var selected = $("#layer_selector li input:checked").get(0);
+	     if (selected !== undefined) {
+		 for (i = 0; i < layers.length; i++) {
+		     if (layers[i].key == selected.value) {
+			 current_layer = layers[i];
+			 break;
+		     }
+		 }
+	     }
+	 }
 	 
 	 function mouseup(event) {
 	     if (current_action) {
@@ -779,8 +846,16 @@
 		 value: 1,
 	     });
 		 
-	     layer1 = new Layer($("#layer-1").get(0));
-	     current_layer = layer1;
+	     layers = [
+		 new Layer($("#layer-1").get(0), "Layer 1", "l1"),
+		 new Layer($("#layer-2").get(0), "Layer 2", "l2"),
+		 new Layer($("#layer-3").get(0), "Layer 3", "l3"),
+	     ];
+	     $( "#layer_selector" ).sortable({
+		 update: update_layers,
+	     });
+	     $( "#layer_selector" ).disableSelection();
+	     update_layers();
 
 	     // Paint the background
 	     var ctx = document.getElementById("background").getContext("2d");
@@ -811,14 +886,23 @@
 	<p>
 	    Stroke width: <span id="stroke_width" style="display:inline-block;width:200px;margin-left:15px"></span>
 	</p>
-	<div style="position:relative">
+	<p>Layers</p>
+	<ul id="layer_selector"></ul>
+	<br>
+	<div id="layer_set" style="position:relative">
 	    <canvas id="background" height="1280px" width="720px" style="z-index:1;position:absolute;left:0px;top:0px">
 		Browser doesn't support canvas! Oops!
 	    </canvas>
 	    <canvas id="layer-1" height="1280px" width="720px" style="z-index:2;position:absolute;left:0px;top:0px">
 		Browser doesn't support canvas! Oops!
 	    </canvas>
-	    <canvas id="tool-overlay" height="1280px" width="720px" style="z-index:3;position:absolute;left:0px;top:0px">
+	    <canvas id="layer-2" height="1280px" width="720px" style="z-index:3;position:absolute;left:0px;top:0px">
+		Browser doesn't support canvas! Oops!
+	    </canvas>
+	    <canvas id="layer-3" height="1280px" width="720px" style="z-index:4;position:absolute;left:0px;top:0px">
+		Browser doesn't support canvas! Oops!
+	    </canvas>
+	    <canvas id="tool-overlay" height="1280px" width="720px" style="z-index:5;position:absolute;left:0px;top:0px">
 		Browser doesn't support canvas! Oops!
 	    </canvas>
 	</div>
