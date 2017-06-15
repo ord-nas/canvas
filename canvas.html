@@ -12,6 +12,9 @@
 	 #layer_selector li { margin: 0 3px 3px 3px; padding: 0.4em; padding-left: 1.5em; font-size: 1.4em; height: 18px; }
 	 #layer_selector li span { position: absolute; margin-left: -1.3em; }
 	 .ui-draggable, .ui-droppable { background-position: top; }
+	 #rename-layer label, #rename-layer input { display:block; }
+	 #rename-layer input.text { margin-bottom:0px; width:95%; padding: .4em; }
+	 #rename-layer fieldset { padding:0; border:0; margin-top:10px; }
 	</style>
 	<script type="text/javascript">
 	 var bucket_size = 1000 * 5;
@@ -846,6 +849,7 @@
 		 value: 1,
 	     });
 		 
+	     // Create the layers
 	     layers = [
 		 new Layer($("#layer-1").get(0), "Layer 1", "l1"),
 		 new Layer($("#layer-2").get(0), "Layer 2", "l2"),
@@ -865,12 +869,51 @@
 	     ctx.closePath();
 	     ctx.fill();
 
+	     // Set up the layer rename dialog
+	     var dialog = $( "#rename-layer" ).dialog({
+		 autoOpen: false,
+		 height: 200,
+		 width: 350,
+		 modal: true,
+		 buttons: {
+		     "Ok": function() {
+			 dialog.dialog( "close" );
+			 return true;
+		     },
+		     Cancel: function() {
+			 dialog.dialog( "close" );
+		     }
+		 },
+	     });
+	     
+	     form = dialog.find( "form" ).on( "submit", function( event ) {
+		 event.preventDefault();
+		 dialog.dialog( "close" );
+		 return true;
+		 //addUser();
+	     });
+	     
+	     $( "#test" ).on( "click", function() {
+		 dialog.dialog( "open" );
+	     });
+
 	     window.requestAnimationFrame(tick);
 	 });
 	</script>
     </head>
     <body>
-	<p>Hello there!</p>
+
+	<div id="rename-layer" title="Rename Layer">
+	    <form>
+		<fieldset>
+		    <input type="text" name="name" id="name" value="Layer Name" class="text ui-widget-content ui-corner-all">
+		    <!-- Allow form submission with keyboard without duplicating the dialog button -->
+		    <input type="submit" tabindex="-1" style="position:absolute; top:-1000px">
+		</fieldset>
+	    </form>
+	</div>
+	
+	<p>Hello there! ASDF!</p>
 	<p>Time:
 	    <input type="text" id="time"/>
 	    <button type="button" id="go">Go</button>
@@ -878,6 +921,7 @@
 	<p>
 	    <button type="button" id="play">Play</button>
 	    <button type="button" id="stop">Stop</button>
+	    <button type="button" id="test">TEST</button>
 	</p>
 	<p id="tool_set"></p>
 	<p>
