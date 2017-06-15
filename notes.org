@@ -25,7 +25,7 @@
 ** Allow layers to be:
 *** TODO Added
 *** TODO Removed
-*** TODO Renamed
+*** DONE Renamed
 *** DONE Reordered
 *** DONE Selected
 ** TODO Layer grouping and nesting?

@@ -7,7 +7,7 @@
 	<style>
 	 #layer_selector { list-style-type: none; margin: 0; padding: 0; width: 60%; }
 	 #layer_selector li { margin: 0 3px 3px 3px; padding: 0.4em; padding-left: 1.5em; font-size: 1.4em; height: 18px; }
-	 #layer_selector li span { position: absolute; margin-left: -1.3em; }
+	 #layer_selector li span.ui-icon { position: absolute; margin-left: -1.3em; }
 	 .ui-draggable, .ui-droppable { background-position: top; }
 	 #rename-layer label, #rename-layer input { display:block; }
 	 #rename-layer input.text { margin-bottom:0px; width:95%; padding: .4em; }
@@ -698,6 +698,63 @@
 	 var layers = [];
 	 var current_layer = null;
 
+	 // TODO: figure out proper encapsulation
+	 [make_rename_dialog, begin_rename_layer] = (function() {
+	     var rename_dialog = null;
+	     var current_rename_layer = null;
+	     function begin_rename_layer(layer) {
+		 current_rename_layer = layer;
+		 $("#layer-rename-name").val(layer.title);
+		 rename_dialog.dialog("open");
+	     }
+	     function end_rename_layer() {
+		 current_rename_layer.title = $("#layer-rename-name").val();
+		 rename_dialog.dialog("close");
+		 update_layers();
+	     }
+
+	     function make_rename_dialog() {
+		 rename_dialog = $( "#rename-layer" ).dialog({
+		     autoOpen: false,
+		     height: 200,
+		     width: 350,
+		     modal: true,
+		     buttons: {
+			 "Ok": end_rename_layer,
+			 "Cancel": function() {
+			     rename_dialog.dialog( "close" );
+			 }
+		     },
+		 });
+		 
+		 rename_dialog.find( "form" ).on( "submit", function( event ) {
+		     event.preventDefault();
+		     return end_rename_layer();
+		 });
+
+		 return rename_dialog;
+	     }
+
+	     return [make_rename_dialog, begin_rename_layer];
+	 })();
+	 
+	 function create_layer_handle(layer) {
+	     var element = $('<li class="ui-state-default"><span class="ui-icon ui-icon-arrowthick-2-n-s"></span></li>');
+	     $("<input type='radio' name='layer_handle'>")
+		 .attr("value", layer.key)
+		 .appendTo(element)
+		 .change(update_layers);
+	     $("<span class='layer-name'>")
+		 .append(document.createTextNode(layer.title))
+		 .appendTo(element);
+	     $("<button type='button' class='layer-rename'>rename</button>")
+		 .click(function() {
+		     begin_rename_layer(layer);
+		 })
+		 .appendTo(element);
+	     return element;
+	 }
+	 
 	 function update_layers() {
 	     var layer_handles = $("#layer_selector li input");
 	     var in_order = [];
@@ -718,16 +775,17 @@
 
 	     // Add new layers to the handle list
 	     for (i = 0; i < layers.length; i++) {
-		 var element = $('<li class="ui-state-default"><span class="ui-icon ui-icon-arrowthick-2-n-s"></span></li>');
-		 $("<input type='radio' name='layer_handle'>")
-		     .attr("value", layers[i].key)
-		     .appendTo(element)
-		     .change(update_layers);
-		 element.append(document.createTextNode(layers[i].title));
+		 var element = create_layer_handle(layers[i]);
 		 element.appendTo($("#layer_selector"));
 	     }
 
 	     layers = in_order.concat(layers);
+
+	     // Handle renames
+	     layer_titles = $("#layer_selector li span.layer-name");
+	     for (i = 0; i < layers.length; i++) {
+		 layer_titles.eq(i).text(layers[i].title);
+	     }
 
 	     // Reorder the actual canvas elements
 	     for (i = 0; i < layers.length; i++) {
@@ -867,33 +925,8 @@
 	     ctx.fill();
 
 	     // Set up the layer rename dialog
-	     var dialog = $( "#rename-layer" ).dialog({
-		 autoOpen: false,
-		 height: 200,
-		 width: 350,
-		 modal: true,
-		 buttons: {
-		     "Ok": function() {
-			 dialog.dialog( "close" );
-			 return true;
-		     },
-		     Cancel: function() {
-			 dialog.dialog( "close" );
-		     }
-		 },
-	     });
+	     make_rename_dialog();
 	     
-	     form = dialog.find( "form" ).on( "submit", function( event ) {
-		 event.preventDefault();
-		 dialog.dialog( "close" );
-		 return true;
-		 //addUser();
-	     });
-	     
-	     $( "#test" ).on( "click", function() {
-		 dialog.dialog( "open" );
-	     });
-
 	     window.requestAnimationFrame(tick);
 	 });
 	</script>
@@ -903,7 +936,7 @@
 	<div id="rename-layer" title="Rename Layer">
 	    <form>
 		<fieldset>
-		    <input type="text" name="name" id="name" value="Layer Name" class="text ui-widget-content ui-corner-all">
+		    <input type="text" name="name" id="layer-rename-name" value="Layer Name" class="text ui-widget-content ui-corner-all">
 		    <!-- Allow form submission with keyboard without duplicating the dialog button -->
 		    <input type="submit" tabindex="-1" style="position:absolute; top:-1000px">
 		</fieldset>
@@ -918,7 +951,6 @@
 	<p>
 	    <button type="button" id="play">Play</button>
 	    <button type="button" id="stop">Stop</button>
-	    <button type="button" id="test">TEST</button>
 	</p>
 	<p id="tool_set"></p>
 	<p>
