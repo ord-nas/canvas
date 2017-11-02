@@ -23,7 +23,7 @@
 ** DONE Draw all layers on tick
 ** TODO Figure out whether to set redraw_on_transform_change for all layers simultaneously
 ** Allow layers to be:
-*** TODO Added
+*** DONE Added
 *** TODO Removed
 *** DONE Renamed
 *** DONE Reordered
