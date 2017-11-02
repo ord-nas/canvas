@@ -93,7 +93,8 @@
 
 	 function Layer(title, id) {
 	     var jCanvas = $('<canvas height="1280px" width="720px" style="position:absolute;left:0px;top:0px"></canvas>');
-	     jCanvas.attr('id', "layer-" + id);
+	     this.id = "layer-" + id;
+	     jCanvas.attr('id', this.id);
 	     $("#layer_set").append(jCanvas);
 	     this.canvas = jCanvas.get(0);
 	     this.title = title;
@@ -133,7 +134,9 @@
 	     return this.temp_canvas;
 	 }
 
-
+	 Layer.prototype.delete = function() {
+	     $("#" + this.id).remove();
+	 }
 	 
 	 // END LAYER DEFINITION
 	 
@@ -757,6 +760,11 @@
 		     begin_rename_layer(layer);
 		 })
 		 .appendTo(element);
+	     $("<button type='button' class='layer-delete'>delete</button>")
+		 .click(function() {
+		     delete_layer(layer);
+		 })
+		 .appendTo(element);
 	     return element;
 	 }
 	 
@@ -821,6 +829,18 @@
 	 function new_layer(event) {
 	     layers.push(new Layer("Layer " + next_layer_key, next_layer_key));
 	     next_layer_key++;
+	     update_layers();
+	 }
+
+	 function delete_layer(layer) {
+	     var i;
+	     for (i = 0; i < layers.length; i++) {
+		 if (layers[i] == layer) {
+		     layers.splice(i, 1);
+		     break;
+		 }
+	     }
+	     layer.delete();
 	     update_layers();
 	 }
 	 

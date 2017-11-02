@@ -24,7 +24,7 @@
 ** TODO Figure out whether to set redraw_on_transform_change for all layers simultaneously
 ** Allow layers to be:
 *** DONE Added
-*** TODO Removed
+*** DONE Removed
 *** DONE Renamed
 *** DONE Reordered
 *** DONE Selected
