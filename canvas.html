@@ -255,7 +255,8 @@
 	 
 	 function tick() {
 	     set_current_project_time();
-	     if (current_action) {
+	     // TODO: prevent bad stuff, like deleting the last layer while a tool is in use!
+	     if (current_action && current_layer) {
 		 current_action.tick();
 	     }
 	     var i;
@@ -824,21 +825,21 @@
 	 }
 	 
 	 function mouseup(event) {
-	     if (current_action) {
+	     if (current_action && current_layer) {
 		 set_current_project_time();
 		 current_action.mouseup(event);
 	     }
 	 }
 
 	 function mousedown(event) {
-	     if (current_action) {
+	     if (current_action && current_layer) {
 		 set_current_project_time();
 		 current_action.mousedown(event);
 	     }
 	 }
 
 	 function mousemove(event) {
-	     if (current_action) {
+	     if (current_action && current_layer) {
 		 set_current_project_time();
 		 current_action.mousemove(event);
 	     }
