@@ -72,3 +72,8 @@
 **** Find the stroke width and shape transform that will produce this brush
 **** Store it along with the stroke (need one at every point in stroke, since transform changes!)
 **** At draw time, temporarily set transformation matrix = matrix * brush_transform_matrix
+** TODO Automatically generated layer names may collide
+*** Suppose auto-naming says next layer is "Layer 5"
+*** Now rename one of the current layers to "Layer 5"
+*** Create new layer
+*** Now you have duplicate layers!
