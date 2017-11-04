@@ -92,7 +92,7 @@
 	 // START LAYER DEFINITION
 
 	 function Layer(title, id) {
-	     var jCanvas = $('<canvas height="1280px" width="720px" style="position:absolute;left:0px;top:0px"></canvas>');
+	     var jCanvas = $('<canvas height="720px" width="1280px" style="position:absolute;left:0px;top:0px"></canvas>');
 	     this.id = "layer-" + id;
 	     jCanvas.attr('id', this.id);
 	     $("#layer_set").append(jCanvas);
@@ -178,7 +178,7 @@
 	 function clear(ctx) {
 	     var m = ctx._matrix;
 	     ctx.resetTransform();
-	     ctx.clearRect(0, 0, 720, 1280);
+	     ctx.clearRect(0, 0, 1280, 720);
 	     ctx.setMatrix(m);
 	 }
 	 
@@ -488,7 +488,7 @@
 		 } else if (event.which === 3 && this.uses_guide_point) {
 		     this.guide_point = getMousePos(event);
 		     var ctx = document.getElementById("tool-overlay").getContext("2d");
-		     ctx.clearRect(0, 0, 720, 1280);
+		     ctx.clearRect(0, 0, 1280, 720);
 		     ctx.beginPath();
 		     ctx.arc(this.guide_point.x, this.guide_point.y, 5, 0, 2 * Math.PI);
 		     ctx.fillStyle = "#FF0000";
@@ -529,7 +529,7 @@
 	 TransformAction.prototype.finish = function() {
 	     this.mouseup();
 	     var ctx = document.getElementById("tool-overlay").getContext("2d");
-	     ctx.clearRect(0, 0, 720, 1280);
+	     ctx.clearRect(0, 0, 1280, 720);
 	     $("#tool-overlay").off("contextmenu");
 	 }
 	 
@@ -950,7 +950,7 @@
 	     var ctx = document.getElementById("background").getContext("2d");
 	     ctx.fillStyle = "#FAF7F8";
 	     ctx.beginPath();
-	     ctx.rect(0, 0, 720, 1280);
+	     ctx.rect(0, 0, 1280, 720);
 	     ctx.closePath();
 	     ctx.fill();
 
@@ -992,10 +992,10 @@
 	<ul id="layer_selector"></ul>
 	<br>
 	<div id="layer_set" style="position:relative">
-	    <canvas id="background" height="1280px" width="720px" style="z-index:0;position:absolute;left:0px;top:0px">
+	    <canvas id="background" height="720px" width="1280px" style="z-index:0;position:absolute;left:0px;top:0px">
 		Browser doesn't support canvas! Oops!
 	    </canvas>
-	    <canvas id="tool-overlay" height="1280px" width="720px" style="z-index:4;position:absolute;left:0px;top:0px">
+	    <canvas id="tool-overlay" height="720px" width="1280px" style="z-index:4;position:absolute;left:0px;top:0px">
 		Browser doesn't support canvas! Oops!
 	    </canvas>
 	</div>
