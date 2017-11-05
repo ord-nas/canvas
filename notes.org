@@ -56,6 +56,8 @@
 ***** Not available in Chrome yet! (https://bugs.chromium.org/p/chromium/issues/detail?id=563816)
 **** TODO Investigate interleaving of transforming stale & redrawing
 ** TODO It's already kind of janky, even when not much is happening ...
+** TODO Try making timelines skip updating when they are offscreen
+*** https://stackoverflow.com/questions/123999/how-to-tell-if-a-dom-element-is-visible-in-the-current-viewport/
 * Refactoring
 ** TODO Refactor evalPeriod to take a function, apply it to each event
 *** Use closures to support additional arguments
