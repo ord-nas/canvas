@@ -89,31 +89,42 @@
 	     };
 	 }
 	 
-	 // START GLOBAL TIMELINE STUFF
-
-	 // TODO: stuff
-	 
-	 // END GLOBAL TIMELINE STUFF
-	 
 	 // START TIMELINE DEFINITION
 
 	 function Timeline(layer) {
-	     var jCanvas = $('<canvas height="100px" width="1000px"></canvas>');
+	     var jCanvas = $('<canvas height="30px" width="1000px"></canvas>');
 	     this.id = "timeline-" + layer.id;
 	     this.layer = layer;
 	     jCanvas.attr('id', this.id);
 	     this.canvas = jCanvas.get(0);
 	     this.ctx = this.canvas.getContext("2d");
-	     this.start = 0;
-	     this.end = 20 * 1000;
+	     jCanvas.on("wheel", this.scroll.bind(this));
 
-	     // Stuff that maybe should be global?
-	     this.thickness = 5;
-	     this.spacing = 10;
-	     this.min_width = 3;
+	     this.max_rank = 0;
+	     this.y_offset = 0;
 	 }
 
+	 // Shared timeline stuff
+	 Timeline.start = 0;
+	 Timeline.end = 20 * 1000;
+	 Timeline.thickness = 5;
+	 Timeline.spacing = 10;
+	 Timeline.min_width = 3;
+	 Timeline.max_height = 150;
+	 Timeline.min_height = 30;
+	 Timeline.scale_per_pixel = 0.001;
+	 Timeline.min_time = 100; // ms
+	 Timeline.cursor_width = 1;
+	 
+	 Timeline.prototype.get_max_y_offset = function() {
+	     return Math.max(0, (this.max_rank + 1) * Timeline.spacing - this.canvas.height);
+	 }	     
+
 	 Timeline.prototype.draw = function() {
+	     var height_required = (this.max_rank + 1) * Timeline.spacing;
+	     this.canvas.height = Math.min(Timeline.max_height, Math.max(Timeline.min_height, height_required));
+	     this.y_offset = Math.min(this.y_offset, this.get_max_y_offset());
+	     
 	     // Init colour
 	     this.ctx.fillStyle = "#9ea2a8";
 	     this.ctx.beginPath();
@@ -121,43 +132,82 @@
 	     this.ctx.closePath();
 	     this.ctx.fill();
 
-	     if (this.end > this.start) {
-		 console.log("DRAW");
-		 // Only drawing the strokes for now
-		 strokes_to_draw = new Set();
-		 var start_bucket = Math.floor(this.start / bucket_size);
-		 var end_bucket = Math.floor(this.end / bucket_size);
-		 for (var index = start_bucket; index <= end_bucket; ++index) {
-		     if (!(index in this.layer.stroke_buckets)) {
+	     // Only drawing the strokes for now
+	     strokes_to_draw = new Set();
+	     var start_bucket = Math.floor(Timeline.start / bucket_size);
+	     var end_bucket = Math.floor(Timeline.end / bucket_size);
+	     for (var index = start_bucket; index <= end_bucket; ++index) {
+		 if (!(index in this.layer.stroke_buckets)) {
+		     continue;
+		 }
+		 for (var stroke of this.layer.stroke_buckets[index]) {
+		     if (stroke.begin() > Timeline.end ||
+			 stroke.end() < Timeline.start) {
 			 continue;
 		     }
-		     for (var stroke of this.layer.stroke_buckets[index]) {
-			 if (stroke.begin() > this.end ||
-			     stroke.end() < this.start) {
-			     continue;
-			 }
-			 strokes_to_draw.add(stroke);
-		     }
+		     strokes_to_draw.add(stroke);
 		 }
-		 for (var stroke of strokes_to_draw) {
-		     var time_delta = this.end - this.start;
-		     var space_delta = this.canvas.width;
-		     var x1 = (stroke.begin() - this.start) / time_delta * space_delta;
-		     var x2 = (stroke.end() - this.start) / time_delta * space_delta;
-		     var y1 = (stroke.rank + 0.5) * this.spacing - (this.thickness / 2.0);
-		     console.log(x1 + " " + x2 + " " + y1);
+	     }
+	     for (var stroke of strokes_to_draw) {
+		 var time_delta = Timeline.end - Timeline.start;
+		 var space_delta = this.canvas.width;
+		 var x1 = (stroke.begin() - Timeline.start) / time_delta * space_delta;
+		 var x2 = (stroke.end() - Timeline.start) / time_delta * space_delta;
+		 var y1 = (stroke.rank + 0.5) * Timeline.spacing - (Timeline.thickness / 2.0);
 
-		     this.ctx.beginPath();
-		     this.ctx.rect(x1, y1, Math.max(x2-x1, this.min_width), this.thickness);
-		     this.ctx.fillStyle = 'blue';
-		     this.ctx.fill();
+		 this.ctx.beginPath();
+		 this.ctx.rect(x1, y1 - this.y_offset, Math.max(x2-x1, Timeline.min_width), Timeline.thickness);
+		 this.ctx.fillStyle = 'blue';
+		 this.ctx.fill();
+	     }
+
+	     // Draw the cursor
+	     var x_now = (current_project_time - Timeline.start) / (Timeline.end - Timeline.start) * this.canvas.width;
+	     this.ctx.beginPath();
+	     this.ctx.moveTo(x_now, 0);
+	     this.ctx.lineTo(x_now, this.canvas.height);
+	     this.ctx.lineWidth = Timeline.cursor_width;
+	     this.ctx.strokeStyle = 'gold';
+	     this.ctx.stroke();
+	 }
+
+	 Timeline.prototype.scroll = function(event) {
+	     event.preventDefault();
+	     if (event.originalEvent.deltaMode != 0) {
+		 console.log("ERROR: wheel event with non pixel deltaMode");
+		 return;
+	     }
+
+	     if (!event.ctrlKey && !event.shiftKey) {
+		 var raw_offset = this.y_offset + event.originalEvent.deltaY;
+		 this.y_offset = Math.max(0, Math.min(this.get_max_y_offset(), raw_offset));
+		 this.draw();
+	     } else if (event.shiftKey) {
+		 var millis_per_pixel = (Timeline.end - Timeline.start) / this.canvas.width;
+		 var new_start = Timeline.start + event.originalEvent.deltaY * millis_per_pixel;
+		 new_start = Math.max(0, new_start);
+		 var delta = new_start - Timeline.start;
+		 Timeline.start = new_start;
+		 Timeline.end += delta;
+		 for (var layer of layers) {
+		     layer.timeline.draw();
+		 }
+	     } else if (event.ctrlKey) {
+		 var pos = getMousePos(event, this.canvas);
+		 var time = pos.x / this.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
+		 console.log(time);
+		 var scale = 1 + (Timeline.scale_per_pixel * event.originalEvent.deltaY);
+		 var new_start = time - ((time - Timeline.start) * scale);
+		 var new_end = time + ((Timeline.end - time) * scale);
+		 Timeline.start = Math.max(0, new_start);
+		 Timeline.end = Math.max(new_end, new_start + Timeline.min_time);
+		 for (var layer of layers) {
+		     layer.timeline.draw();
 		 }
 	     }
 	 }
 	 
-	 // END TIMELINE DEFINITION
-
-	 function assign_rank(event, buckets) {
+	 Timeline.prototype.assign_rank = function(event, buckets) {
 	     var start_bucket = Math.floor(event.begin() / bucket_size);
 	     var end_bucket = Math.floor(event.end() / bucket_size);
 	     var taken = [];
@@ -178,8 +228,12 @@
 	     while (taken[rank]) ++rank;
 	     event.rank = rank;
 
+	     this.max_rank = Math.max(this.max_rank, rank);
+	     
 	     return rank;
 	 }
+ 
+	 // END TIMELINE DEFINITION
 	 
 	 // START LAYER DEFINITION
 
@@ -235,9 +289,9 @@
 	 Layer.prototype.finalize_event = function(event) {
 	     // What is this thing?
 	     if (event instanceof Stroke) {
-		 assign_rank(event, this.stroke_buckets);
+		 this.timeline.assign_rank(event, this.stroke_buckets);
 	     } else if (event instanceof Transform) {
-		 assign_rank(event, this.transform_buckets);
+		 this.timeline.assign_rank(event, this.transform_buckets);
 	     } else {
 		 console.log("ERROR UNRECOGNIZED EVENT");
 	     }
@@ -364,7 +418,9 @@
 	 }
 	 
 	 function tick() {
+	     var prev = current_project_time;
 	     set_current_project_time();
+	     var changed = (current_project_time != prev);
 	     // TODO: prevent bad stuff, like deleting the last layer while a tool is in use!
 	     if (current_action && current_layer) {
 		 current_action.tick();
@@ -377,6 +433,11 @@
 		 // TODO: should I just make this part of set_current_project_time?
 		 $("#time").val(current_project_time / 1000);
 	     }
+	     if (changed) {
+		 for (i = 0; i < layers.length; i++) {
+		     layers[i].timeline.draw();
+		 }
+	     }		 
 	     window.requestAnimationFrame(tick);
 	 }
 	 
