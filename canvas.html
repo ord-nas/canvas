@@ -58,7 +58,7 @@
 		 return t.multiply(r).multiply(t_inv);
 	     },
 	 };
-	 
+
 	 // Based on implementation at: https://stackoverflow.com/questions/7395813/html5-canvas-get-transform-matrix
 	 function addMatrixTrackingToContext(ctx) {
 	     ctx._matrix = getIdentityMatrix();
@@ -88,7 +88,7 @@
 		 __proto__: prior_proto,
 	     };
 	 }
-	 
+
 	 // START TIMELINE DEFINITION
 
 	 function Timeline(layer) {
@@ -115,16 +115,16 @@
 	 Timeline.scale_per_pixel = 0.001;
 	 Timeline.min_time = 100; // ms
 	 Timeline.cursor_width = 1;
-	 
+
 	 Timeline.prototype.get_max_y_offset = function() {
 	     return Math.max(0, (this.max_rank + 1) * Timeline.spacing - this.canvas.height);
-	 }	     
+	 }
 
 	 Timeline.prototype.draw = function() {
 	     var height_required = (this.max_rank + 1) * Timeline.spacing;
 	     this.canvas.height = Math.min(Timeline.max_height, Math.max(Timeline.min_height, height_required));
 	     this.y_offset = Math.min(this.y_offset, this.get_max_y_offset());
-	     
+
 	     // Init colour
 	     this.ctx.fillStyle = "#9ea2a8";
 	     this.ctx.beginPath();
@@ -206,7 +206,7 @@
 		 }
 	     }
 	 }
-	 
+
 	 Timeline.prototype.assign_rank = function(event, buckets) {
 	     var start_bucket = Math.floor(event.begin() / bucket_size);
 	     var end_bucket = Math.floor(event.end() / bucket_size);
@@ -229,12 +229,12 @@
 	     event.rank = rank;
 
 	     this.max_rank = Math.max(this.max_rank, rank);
-	     
+
 	     return rank;
 	 }
- 
+
 	 // END TIMELINE DEFINITION
-	 
+
 	 // START LAYER DEFINITION
 
 	 function Layer(title, id) {
@@ -264,7 +264,7 @@
 	 Layer.prototype.clear_temp_canvas = function() {
 	     this.temp_canvas = null;
 	 }
-	 
+
 	 Layer.prototype.reset_temp_canvas = function() {
 	     this.temp_canvas = document.createElement('canvas');
 	     this.temp_canvas.width = this.canvas.width;
@@ -274,7 +274,7 @@
 	     ctx.drawImage(this.canvas, 0, 0);
 	     ctx.setMatrix(this.ctx._matrix);
 	 }
-	 
+
 	 Layer.prototype.get_temp_canvas = function() {
 	     if (this.temp_canvas === null) {
 		 this.reset_temp_canvas();
@@ -298,16 +298,16 @@
 	     // Update timeline to reflecet new event
 	     this.timeline.draw();
 	 }
-	 
+
 	 // END LAYER DEFINITION
-	 
+
 	 function addToBucket(buckets, index, item) {
 	     if (!(index in buckets)) {
 		 buckets[index] = [];
 	     }
 	     buckets[index].push(item);
 	 }
-	 
+
 	 function getMousePos(evt, canvas) {
 	     if (canvas === undefined) {
 		 canvas = document.getElementById("tool-overlay");
@@ -318,7 +318,7 @@
 		 y: evt.clientY - rect.top,
 	     };
 	 }
-	 
+
 	 function findTransformedPoint(pnt, layer) {
 	     var svg_pnt = getSVGElement().createSVGPoint();
 	     svg_pnt.x = pnt.x;
@@ -342,7 +342,7 @@
 	     ctx.clearRect(0, 0, 1280, 720);
 	     ctx.setMatrix(m);
 	 }
-	 
+
 	 function compare_events(a, b) {
 	     if (a.time < b.time) {
 		 return -1;
@@ -366,7 +366,7 @@
 	     all_events.sort(compare_events);
 	     return all_events;
 	 }
-	 
+
 	 function evalPeriod(start, end, buckets, args) {
 	     var i, j, bucket;
 	     var performed_action = false;
@@ -416,7 +416,7 @@
 	     }
 	     return evalPeriod(start, end, layer.transform_buckets, [ctx]);
 	 }
-	 
+
 	 function tick() {
 	     var prev = current_project_time;
 	     set_current_project_time();
@@ -437,13 +437,13 @@
 		 for (i = 0; i < layers.length; i++) {
 		     layers[i].timeline.draw();
 		 }
-	     }		 
+	     }
 	     window.requestAnimationFrame(tick);
 	 }
-	 
+
 	 var always_clear = false;
 	 var always_reset_transform = false;
-	 
+
 	 function standard_draw(layer) {
 	     var now = {
 		 time: current_project_time,
@@ -476,7 +476,7 @@
 	     // post_transform_draw expects.
 	     layer.clear_temp_canvas();
 	 }
-	 
+
 	 function post_transform_draw(layer) {
 	     var temp_canvas = layer.get_temp_canvas();
 	     var temp_ctx = temp_canvas.getContext("2d");
@@ -505,7 +505,7 @@
 	     }
 	     layer.last_draw = now;
 	 }
-	 
+
 	 function draw(layer) {
 	     if (layer.redraw_on_transform_change) {
 		 standard_draw(layer);
@@ -513,7 +513,7 @@
 		 post_transform_draw(layer);
 	     }
 	 }
-	 
+
 	 function set_current_project_time() {
 	     current_project_time = last_project_time;
 	     if (playing) {
@@ -530,7 +530,7 @@
 	 function get_current_width() {
 	     return $("#stroke_width").slider("value");
 	 }
-	 
+
 	 // STROKE EVENT
 
 	 function StrokeEvent(start, end, time, seq_id, colour, width) {
@@ -552,7 +552,7 @@
 	     ctx.strokeStyle = this.colour;
 	     ctx.stroke();
 	 }
-	 
+
 	 // STROKE
 
 	 function Stroke(start, colour, width) {
@@ -586,7 +586,7 @@
 		 return this.start;
 	     }
 	 }
-	 
+
 	 // TRANSFORM
 
 	 function Transform(start) {
@@ -622,7 +622,7 @@
 		 return this.start;
 	     }
 	 }
-	 
+
 	 // TRANSFORM ACTION
 
 	 function TransformAction(matrix_fun, uses_guide_point, point_filter) {
@@ -634,13 +634,13 @@
 	     this.matrix_fun = matrix_fun;
 	     this.point_filter = point_filter;
 	     this.uses_guide_point = uses_guide_point;
-	     
+
 	     this.guide_point = null;
 	     this.initial_point = null;
 	     this.last_point = null;
 	     this.current_point = null;
 	 }
-	 
+
 	 TransformAction.prototype.mouseup = function(event) {
 	     if (this.active_transform !== null) {
 		 this.active_layer.finalize_event(this.active_transform);
@@ -667,7 +667,7 @@
 		     if (this.point_filter && !this.point_filter(this.guide_point, pnt)) {
 			 return;
 		     }
-		     
+
 		     this.initial_point = pnt;
 		     this.current_point = this.initial_point;
 		     var start_time = current_project_time;
@@ -688,7 +688,7 @@
 		 }
 	     }
 	 };
-	 
+
 	 TransformAction.prototype.mousemove = function(event) {
 	     if (this.active_transform !== null) {
 		 var pnt = getMousePos(event);
@@ -697,7 +697,7 @@
 		 if (this.point_filter && !this.point_filter(this.guide_point, pnt)) {
 		     return;
 		 }
-		 
+
 		 var project_time = current_project_time;
 		 var bucket = Math.floor(project_time / bucket_size);
 		 this.last_point = this.current_point;
@@ -724,7 +724,7 @@
 	     ctx.clearRect(0, 0, 1280, 720);
 	     $("#tool-overlay").off("contextmenu");
 	 }
-	 
+
 	 TransformAction.prototype.start = function() {
 	     $("#tool-overlay").on("contextmenu", function(event) {
 		 event.preventDefault();
@@ -734,19 +734,19 @@
 	     this.last_point = null;
 	     this.current_point = null;
 	 }
-	 
+
 	 TransformAction.prototype.tick = function() { /* do nothing */ }
 
-	 
+
 	 // PAINT ACTION
-	 
+
 	 function PaintAction() {
 	     this.active_stroke = null;
 	     this.active_layer = null;
 	     this.active_bucket = null;
 	     this.colour = null;
 	 }
-	 
+
 	 PaintAction.prototype.mouseup = function(event) {
 	     if (this.active_stroke !== null) {
 		 this.active_layer.finalize_event(this.active_stroke);
@@ -777,7 +777,7 @@
 		 addToBucket(this.active_layer.stroke_buckets, this.active_bucket, this.active_stroke);
 	     }
 	 };
-	 
+
 	 PaintAction.prototype.mousemove = function(event) {
 	     this.mouse_pos = getMousePos(event);
 	     this.tick();
@@ -848,7 +848,7 @@
 	     var dy = p1.y - p2.y;
 	     return Math.sqrt(dx*dx + dy*dy);
 	 }
-	 
+
 	 function RotationAndUniformScaleMaker(allow_rotation, allow_uniform_scale, safety_margin) {
 	     if (safety_margin === undefined) {
 		 safety_margin = 5;
@@ -860,7 +860,7 @@
 		 var current_r = Math.atan2(current_point.y - guide_point.y, current_point.x - guide_point.x);
 		 var last_r = Math.atan2(last_point.y - guide_point.y, last_point.x - guide_point.x);
 		 var r = allow_rotation ? (current_r - last_r) : 0;
-		 
+
 		 var scale_matrix = matrixMaker.scaleAbout(guide_point.x, guide_point.y, s, s);
 		 var rotation_matrix = matrixMaker.rotateAbout(guide_point.x, guide_point.y, r);
 		 return scale_matrix.multiply(rotation_matrix);
@@ -927,7 +927,7 @@
 			 }
 		     },
 		 });
-		 
+
 		 rename_dialog.find( "form" ).on( "submit", function( event ) {
 		     event.preventDefault();
 		     return end_rename_layer();
@@ -938,7 +938,7 @@
 
 	     return [make_rename_dialog, begin_rename_layer];
 	 })();
-	 
+
 	 function create_layer_handle(layer) {
 	     var element = $('<li class="ui-state-default"><span class="ui-icon ui-icon-arrowthick-2-n-s"></span></li>');
 	     $("<input type='radio' name='layer_handle'>")
@@ -962,7 +962,7 @@
 	     layer.timeline.draw();
 	     return element;
 	 }
-	 
+
 	 function update_layers() {
 	     var layer_handles = $("#layer_selector li input");
 	     var in_order = [];
@@ -1038,7 +1038,7 @@
 	     layer.delete();
 	     update_layers();
 	 }
-	 
+
 	 function mouseup(event) {
 	     if (current_action && current_layer) {
 		 set_current_project_time();
@@ -1059,7 +1059,7 @@
 		 current_action.mousemove(event);
 	     }
 	 }
-	 
+
 	 function play() {
 	     if (!playing) {
 		 var now = new Date();
@@ -1085,7 +1085,7 @@
 		 $("#time").val(last_project_time / 1000);
 	     }
 	 }
-	 
+
 	 function tool_change() {
 	     if (current_action) current_action.finish();
 	     var i;
@@ -1097,12 +1097,12 @@
 	     }
 	     if (current_action) current_action.start();
 	 }
-	 
+
 	 $(document).ready(function () {
 	     last_project_time = 0;
 	     last_draw = null;
 	     last_transform = null;
-	     
+
 	     var now = new Date();
 	     last_real_time = now.getTime();
 
@@ -1125,14 +1125,14 @@
 	     $("#tool_set input:first-child").attr("checked", "checked");
 	     $("input[type=radio][name=tool]").change(tool_change);
 	     $("input[type=radio][name=tool]:checked").change();
-	     
+
 	     $("#stroke_width").slider({
 		 range: "min",
 		 min: 1,
 		 max: 25,
 		 value: 1,
 	     });
-		 
+
 	     // Create the layers
 	     layers = [];
 	     $( "#layer_selector" ).sortable({
@@ -1151,7 +1151,7 @@
 
 	     // Set up the layer rename dialog
 	     make_rename_dialog();
-	     
+
 	     window.requestAnimationFrame(tick);
 	 });
 	</script>
@@ -1167,7 +1167,7 @@
 		</fieldset>
 	    </form>
 	</div>
-	
+
 	<p>Time:
 	    <input type="text" id="time"/>
 	    <button type="button" id="go">Go</button>
