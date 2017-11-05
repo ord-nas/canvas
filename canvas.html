@@ -769,7 +769,9 @@
 		 };
 		 this.active_transform.deltas.push(delta);
 		 if (bucket != this.active_bucket) {
-		     addToBucket(this.active_layer.transform_buckets, bucket, this.active_transform);
+		     for (var b = this.active_bucket + 1; b <= bucket; ++b) {
+			 addToBucket(this.active_layer.transform_buckets, b, this.active_transform);
+		     }
 		     this.active_bucket = bucket;
 		 }
 	     }
@@ -858,7 +860,9 @@
 		 this.active_stroke.pnts.push(pnt);
 		 var bucket = Math.floor(project_time / bucket_size);
 		 if (bucket != this.active_bucket) {
-		     addToBucket(this.active_layer.stroke_buckets, bucket, this.active_stroke);
+		     for (var b = this.active_bucket + 1; b <= bucket; ++b) {
+			 addToBucket(this.active_layer.stroke_buckets, b, this.active_stroke);
+		     }
 		     this.active_bucket = bucket;
 		 }
 	     }
