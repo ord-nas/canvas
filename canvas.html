@@ -199,11 +199,14 @@
 		 console.log(time);
 		 var scale = 1 + (Timeline.scale_per_pixel * event.originalEvent.deltaY);
 		 var new_start = time - ((time - Timeline.start) * scale);
+		 new_start = Math.max(0, new_start);
 		 var new_end = time + ((Timeline.end - time) * scale);
-		 Timeline.start = Math.max(0, new_start);
-		 Timeline.end = Math.max(new_end, new_start + Timeline.min_time);
-		 for (var layer of layers) {
-		     layer.timeline.draw();
+		 if (new_start + Timeline.min_time < new_end) {
+		     Timeline.start = new_start;
+		     Timeline.end = new_end;
+		     for (var layer of layers) {
+			 layer.timeline.draw();
+		     }
 		 }
 	     }
 	 }
