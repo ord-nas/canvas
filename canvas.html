@@ -5,8 +5,8 @@
 	<script src="jquery-3.2.1.min.js"></script>
 	<script src="jquery-ui.js"></script>
 	<style>
-	 #layer_selector { list-style-type: none; margin: 0; padding: 0; width: 60%; }
-	 #layer_selector li { margin: 0 3px 3px 3px; padding: 0.4em; padding-left: 1.5em; font-size: 1.4em; height: 18px; }
+	 #layer_selector { list-style-type: none; margin: 0; padding: 0; width: 100%; }
+	 #layer_selector li { margin: 0 3px 3px 3px; padding: 0.4em; padding-left: 1.5em; font-size: 1.4em; }
 	 #layer_selector li span.ui-icon { position: absolute; margin-left: -1.3em; }
 	 .ui-draggable, .ui-droppable { background-position: top; }
 	 #rename-layer label, #rename-layer input { display:block; }
@@ -89,6 +89,98 @@
 	     };
 	 }
 	 
+	 // START GLOBAL TIMELINE STUFF
+
+	 // TODO: stuff
+	 
+	 // END GLOBAL TIMELINE STUFF
+	 
+	 // START TIMELINE DEFINITION
+
+	 function Timeline(layer) {
+	     var jCanvas = $('<canvas height="100px" width="1000px"></canvas>');
+	     this.id = "timeline-" + layer.id;
+	     this.layer = layer;
+	     jCanvas.attr('id', this.id);
+	     this.canvas = jCanvas.get(0);
+	     this.ctx = this.canvas.getContext("2d");
+	     this.start = 0;
+	     this.end = 20 * 1000;
+
+	     // Stuff that maybe should be global?
+	     this.thickness = 5;
+	     this.spacing = 10;
+	     this.min_width = 3;
+	 }
+
+	 Timeline.prototype.draw = function() {
+	     // Init colour
+	     this.ctx.fillStyle = "#9ea2a8";
+	     this.ctx.beginPath();
+	     this.ctx.rect(0, 0, this.canvas.width, this.canvas.height);
+	     this.ctx.closePath();
+	     this.ctx.fill();
+
+	     if (this.end > this.start) {
+		 console.log("DRAW");
+		 // Only drawing the strokes for now
+		 strokes_to_draw = new Set();
+		 var start_bucket = Math.floor(this.start / bucket_size);
+		 var end_bucket = Math.floor(this.end / bucket_size);
+		 for (var index = start_bucket; index <= end_bucket; ++index) {
+		     if (!(index in this.layer.stroke_buckets)) {
+			 continue;
+		     }
+		     for (var stroke of this.layer.stroke_buckets[index]) {
+			 if (stroke.begin() > this.end ||
+			     stroke.end() < this.start) {
+			     continue;
+			 }
+			 strokes_to_draw.add(stroke);
+		     }
+		 }
+		 for (var stroke of strokes_to_draw) {
+		     var time_delta = this.end - this.start;
+		     var space_delta = this.canvas.width;
+		     var x1 = (stroke.begin() - this.start) / time_delta * space_delta;
+		     var x2 = (stroke.end() - this.start) / time_delta * space_delta;
+		     var y1 = (stroke.rank + 0.5) * this.spacing - (this.thickness / 2.0);
+		     console.log(x1 + " " + x2 + " " + y1);
+
+		     this.ctx.beginPath();
+		     this.ctx.rect(x1, y1, Math.max(x2-x1, this.min_width), this.thickness);
+		     this.ctx.fillStyle = 'blue';
+		     this.ctx.fill();
+		 }
+	     }
+	 }
+	 
+	 // END TIMELINE DEFINITION
+
+	 function assign_rank(event, buckets) {
+	     var start_bucket = Math.floor(event.begin() / bucket_size);
+	     var end_bucket = Math.floor(event.end() / bucket_size);
+	     var taken = [];
+	     for (var index = start_bucket; index <= end_bucket; ++index) {
+		 if (!(index in buckets)) {
+		     continue;
+		 }
+		 for (var e of buckets[index]) {
+		     if (e.rank === undefined ||
+			 e.begin() > event.end() ||
+			 e.end() < event.begin()) {
+			 continue;
+		     }
+		     taken[e.rank] = true;
+		 }
+	     }
+	     var rank = 0;
+	     while (taken[rank]) ++rank;
+	     event.rank = rank;
+
+	     return rank;
+	 }
+	 
 	 // START LAYER DEFINITION
 
 	 function Layer(title, id) {
@@ -101,6 +193,8 @@
 	     this.key = "l" + id;
 	     this.ctx = this.canvas.getContext("2d");
 	     addMatrixTrackingToContext(this.ctx);
+
+	     this.timeline = new Timeline(this);
 
 	     this.last_draw = null;
 	     this.last_transform = null;
@@ -136,6 +230,19 @@
 
 	 Layer.prototype.delete = function() {
 	     $("#" + this.id).remove();
+	 }
+
+	 Layer.prototype.finalize_event = function(event) {
+	     // What is this thing?
+	     if (event instanceof Stroke) {
+		 assign_rank(event, this.stroke_buckets);
+	     } else if (event instanceof Transform) {
+		 assign_rank(event, this.transform_buckets);
+	     } else {
+		 console.log("ERROR UNRECOGNIZED EVENT");
+	     }
+	     // Update timeline to reflecet new event
+	     this.timeline.draw();
 	 }
 	 
 	 // END LAYER DEFINITION
@@ -333,7 +440,7 @@
 		 layer.ctx.drawImage(temp_canvas, 0, 0);
 		 // Do this just to leave layer.ctx's matrix in a state that
 		 // standard_draw expects.
-		 layer.ctx.setMatrix(temp_ctx._matrix);
+		     layer.ctx.setMatrix(temp_ctx._matrix);
 	     }
 	     layer.last_draw = now;
 	 }
@@ -407,6 +514,17 @@
 	     }
 	 }
 
+	 Stroke.prototype.begin = function() {
+	     return this.start;
+	 }
+
+	 Stroke.prototype.end = function() {
+	     if (this.pnts.length > 0) {
+		 return this.start + this.pnts[this.pnts.length-1].time;
+	     } else {
+		 return this.start;
+	     }
+	 }
 	 
 	 // TRANSFORM
 
@@ -432,6 +550,18 @@
 	     }
 	 }
 
+	 Transform.prototype.begin = function() {
+	     return this.start;
+	 }
+
+	 Transform.prototype.end = function() {
+	     if (this.deltas.length > 0) {
+		 return this.start + this.deltas[this.deltas.length-1].time;
+	     } else {
+		 return this.start;
+	     }
+	 }
+	 
 	 // TRANSFORM ACTION
 
 	 function TransformAction(matrix_fun, uses_guide_point, point_filter) {
@@ -452,6 +582,7 @@
 	 
 	 TransformAction.prototype.mouseup = function(event) {
 	     if (this.active_transform !== null) {
+		 this.active_layer.finalize_event(this.active_transform);
 		 this.active_layer.redraw_on_transform_change = true;
 		 this.active_transform = null;
 		 this.active_layer = null;
@@ -545,7 +676,7 @@
 	 
 	 TransformAction.prototype.tick = function() { /* do nothing */ }
 
-			 
+	 
 	 // PAINT ACTION
 	 
 	 function PaintAction() {
@@ -557,6 +688,7 @@
 	 
 	 PaintAction.prototype.mouseup = function(event) {
 	     if (this.active_stroke !== null) {
+		 this.active_layer.finalize_event(this.active_stroke);
 		 this.active_stroke = null;
 		 this.active_layer = null;
 		 this.active_bucket = null;
@@ -765,6 +897,8 @@
 		     delete_layer(layer);
 		 })
 		 .appendTo(element);
+	     $(layer.timeline.canvas).appendTo(element);
+	     layer.timeline.draw();
 	     return element;
 	 }
 	 
