@@ -132,32 +132,33 @@
 	     this.ctx.closePath();
 	     this.ctx.fill();
 
-	     // Only drawing the strokes for now
-	     strokes_to_draw = new Set();
+	     to_draw = new Set();
 	     var start_bucket = Math.floor(Timeline.start / bucket_size);
 	     var end_bucket = Math.floor(Timeline.end / bucket_size);
 	     for (var index = start_bucket; index <= end_bucket; ++index) {
-		 if (!(index in this.layer.stroke_buckets)) {
-		     continue;
-		 }
-		 for (var stroke of this.layer.stroke_buckets[index]) {
-		     if (stroke.begin() > Timeline.end ||
-			 stroke.end() < Timeline.start) {
+		 for (var buckets of [this.layer.stroke_buckets, this.layer.transform_buckets]) {
+		     if (!(index in buckets)) {
 			 continue;
 		     }
-		     strokes_to_draw.add(stroke);
+		     for (var event of buckets[index]) {
+			 if (event.begin() > Timeline.end ||
+			     event.end() < Timeline.start) {
+			     continue;
+			 }
+			 to_draw.add(event);
+		     }
 		 }
 	     }
-	     for (var stroke of strokes_to_draw) {
+	     for (var event of to_draw) {
 		 var time_delta = Timeline.end - Timeline.start;
 		 var space_delta = this.canvas.width;
-		 var x1 = (stroke.begin() - Timeline.start) / time_delta * space_delta;
-		 var x2 = (stroke.end() - Timeline.start) / time_delta * space_delta;
-		 var y1 = (stroke.rank + 0.5) * Timeline.spacing - (Timeline.thickness / 2.0);
+		 var x1 = (event.begin() - Timeline.start) / time_delta * space_delta;
+		 var x2 = (event.end() - Timeline.start) / time_delta * space_delta;
+		 var y1 = (event.rank + 0.5) * Timeline.spacing - (Timeline.thickness / 2.0);
 
 		 this.ctx.beginPath();
 		 this.ctx.rect(x1, y1 - this.y_offset, Math.max(x2-x1, Timeline.min_width), Timeline.thickness);
-		 this.ctx.fillStyle = 'blue';
+		 this.ctx.fillStyle = (event instanceof Stroke ? 'blue' : 'orange');
 		 this.ctx.fill();
 	     }
 
@@ -207,21 +208,23 @@
 	     }
 	 }
 
-	 Timeline.prototype.assign_rank = function(event, buckets) {
+	 Timeline.prototype.assign_rank = function(event) {
 	     var start_bucket = Math.floor(event.begin() / bucket_size);
 	     var end_bucket = Math.floor(event.end() / bucket_size);
 	     var taken = [];
 	     for (var index = start_bucket; index <= end_bucket; ++index) {
-		 if (!(index in buckets)) {
-		     continue;
-		 }
-		 for (var e of buckets[index]) {
-		     if (e.rank === undefined ||
-			 e.begin() > event.end() ||
-			 e.end() < event.begin()) {
+		 for (buckets of [this.layer.stroke_buckets, this.layer.transform_buckets]) {
+		     if (!(index in buckets)) {
 			 continue;
 		     }
-		     taken[e.rank] = true;
+		     for (var e of buckets[index]) {
+			 if (e.rank === undefined ||
+			     e.begin() > event.end() ||
+			     e.end() < event.begin()) {
+			     continue;
+			 }
+			 taken[e.rank] = true;
+		     }
 		 }
 	     }
 	     var rank = 0;
@@ -287,15 +290,8 @@
 	 }
 
 	 Layer.prototype.finalize_event = function(event) {
-	     // What is this thing?
-	     if (event instanceof Stroke) {
-		 this.timeline.assign_rank(event, this.stroke_buckets);
-	     } else if (event instanceof Transform) {
-		 this.timeline.assign_rank(event, this.transform_buckets);
-	     } else {
-		 console.log("ERROR UNRECOGNIZED EVENT");
-	     }
-	     // Update timeline to reflecet new event
+	     this.timeline.assign_rank(event);
+	     // Update timeline to reflect new event
 	     this.timeline.draw();
 	 }
 
