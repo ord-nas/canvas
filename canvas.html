@@ -20,6 +20,7 @@
 	 var last_real_time = 0;
 	 var current_project_time = 0;
 	 var current_seq_id = 0;
+	 var selection = [];
 
 	 var svg_element = null;
 	 function getIdentityMatrix() {
@@ -99,6 +100,7 @@
 	     this.canvas = jCanvas.get(0);
 	     this.ctx = this.canvas.getContext("2d");
 	     jCanvas.on("wheel", this.scroll.bind(this));
+	     jCanvas.on("click", this.click.bind(this));
 
 	     this.max_rank = 0;
 	     this.y_offset = 0;
@@ -146,6 +148,29 @@
 	     return this.events_in_time_range(Timeline.start, Timeline.end);
 	 }
 
+	 Timeline.prototype.get_rect = function(event) {
+	     var time_delta = Timeline.end - Timeline.start;
+	     var space_delta = this.canvas.width;
+
+	     var x1 = (event.begin() - Timeline.start) / time_delta * space_delta;
+	     var x2 = (event.end() - Timeline.start) / time_delta * space_delta;
+	     var y1 = (event.rank + 0.5) * Timeline.spacing - (Timeline.thickness / 2.0);
+
+	     return [x1, y1 - this.y_offset, Math.max(x2-x1, Timeline.min_width), Timeline.thickness];
+	 }
+
+	 Timeline.prototype.get_colour = function(event) {
+	     if (selection.indexOf(event) != -1) {
+		 // TODO: will need something better here when we start handling selections of
+		 // parts of events.
+		 return 'red';
+	     } else if (event instanceof Stroke) {
+		 return 'blue';
+	     } else {
+		 return 'orange';
+	     }
+	 }
+
 	 Timeline.prototype.draw = function() {
 	     var height_required = (this.max_rank + 1) * Timeline.spacing;
 	     this.canvas.height = Math.min(Timeline.max_height, Math.max(Timeline.min_height, height_required));
@@ -158,18 +183,12 @@
 	     this.ctx.closePath();
 	     this.ctx.fill();
 
-	     // Constants
-	     var time_delta = Timeline.end - Timeline.start;
-	     var space_delta = this.canvas.width;
-
 	     for (var event of this.events_in_view()) {
-		 var x1 = (event.begin() - Timeline.start) / time_delta * space_delta;
-		 var x2 = (event.end() - Timeline.start) / time_delta * space_delta;
-		 var y1 = (event.rank + 0.5) * Timeline.spacing - (Timeline.thickness / 2.0);
+		 var [x1, y1, width, height] = this.get_rect(event);
 
 		 this.ctx.beginPath();
-		 this.ctx.rect(x1, y1 - this.y_offset, Math.max(x2-x1, Timeline.min_width), Timeline.thickness);
-		 this.ctx.fillStyle = (event instanceof Stroke ? 'blue' : 'orange');
+		 this.ctx.rect(x1, y1, width, height);
+		 this.ctx.fillStyle = this.get_colour(event);
 		 this.ctx.fill();
 	     }
 
@@ -207,7 +226,6 @@
 	     } else if (event.ctrlKey) {
 		 var pos = getMousePos(event, this.canvas);
 		 var time = pos.x / this.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
-		 console.log(time);
 		 var scale = 1 + (Timeline.scale_per_pixel * event.originalEvent.deltaY);
 		 var new_start = time - ((time - Timeline.start) * scale);
 		 new_start = Math.max(0, new_start);
@@ -236,6 +254,30 @@
 	     this.max_rank = Math.max(this.max_rank, rank);
 
 	     return rank;
+	 }
+
+	 Timeline.prototype.mouse_pos_to_event = function(pos) {
+	     for (var event of this.events_in_view()) {
+		 var [x1, y1, width, height] = this.get_rect(event);
+		 if (pos.x >= x1 &&
+		     pos.x <= x1+width &&
+		     pos.y >= y1 &&
+		     pos.y <= y1+height) {
+		     return event;
+		 }
+	     }
+	     return null;
+	 }
+
+	 Timeline.prototype.click = function(evnt) {
+	     var pos = getMousePos(evnt, this.canvas);
+	     var selected_event = this.mouse_pos_to_event(pos);
+	     if (selected_event === null) {
+		 selection = [];
+	     } else {
+		 selection = [selected_event];
+	     }
+	     this.draw();
 	 }
 
 	 // END TIMELINE DEFINITION
