@@ -45,7 +45,7 @@
 ** TODO Paintbucket
 ** TODO Allow brush shape to be transformed?
 * Timeline view
-** TODO Figure out HOW!
+** DONE Figure out HOW!
 *** Synchronized scrollbar reference: http://jsfiddle.net/kunknown/VVaEq/2/
 * Performance
 ** TODO Profile the drawing function (especially when it needs to redraw every frame)
@@ -55,6 +55,7 @@
 **** DONE Investigate redrawing using Web Workers
 ***** Not available in Chrome yet! (https://bugs.chromium.org/p/chromium/issues/detail?id=563816)
 **** TODO Investigate interleaving of transforming stale & redrawing
+** TODO It's already kind of janky, even when not much is happening ...
 * Refactoring
 ** TODO Refactor evalPeriod to take a function, apply it to each event
 *** Use closures to support additional arguments
