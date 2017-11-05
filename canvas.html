@@ -272,10 +272,21 @@
 	 Timeline.prototype.click = function(evnt) {
 	     var pos = getMousePos(evnt, this.canvas);
 	     var selected_event = this.mouse_pos_to_event(pos);
-	     if (selected_event === null) {
-		 selection = [];
+	     if (evnt.ctrlKey) {
+		 if (selected_event !== null) {
+		     var index = selection.indexOf(selected_event);
+		     if (index === -1) {
+			 selection.push(selected_event);
+		     } else {
+			 selection.splice(index, 1);
+		     }
+		 }
 	     } else {
-		 selection = [selected_event];
+		 if (selected_event !== null) {
+		     selection = [selected_event];
+		 } else {
+		     selection = [];
+		 }
 	     }
 	     this.draw();
 	 }
