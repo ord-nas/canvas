@@ -431,7 +431,13 @@
 		 // TODO: should I just make this part of set_current_project_time?
 		 $("#time").val(current_project_time / 1000);
 	     }
-	     if (changed) {
+	     if (playing || changed) {
+		 // We need "player or changed" instead of just "changed", because in the case
+		 // of mouse moves in the canvas area, the mouse move will update the current
+		 // project time, and apparently that happens at about the same time as this
+		 // tick, because in that case our call to set_project_time will see no difference,
+		 // so we will see changed === false. That will cause us not to update when we
+		 // should.
 		 for (i = 0; i < layers.length; i++) {
 		     layers[i].timeline.draw();
 		 }
