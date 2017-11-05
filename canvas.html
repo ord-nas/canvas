@@ -104,6 +104,7 @@
 
 	     this.max_rank = 0;
 	     this.y_offset = 0;
+	     this.needs_redraw = true;
 	 }
 
 	 // Shared timeline stuff
@@ -200,6 +201,8 @@
 	     this.ctx.lineWidth = Timeline.cursor_width;
 	     this.ctx.strokeStyle = 'gold';
 	     this.ctx.stroke();
+
+	     this.needs_redraw = false;
 	 }
 
 	 Timeline.prototype.scroll = function(event) {
@@ -212,7 +215,7 @@
 	     if (!event.ctrlKey && !event.shiftKey) {
 		 var raw_offset = this.y_offset + event.originalEvent.deltaY;
 		 this.y_offset = Math.max(0, Math.min(this.get_max_y_offset(), raw_offset));
-		 this.draw();
+		 this.needs_redraw = true;
 	     } else if (event.shiftKey) {
 		 var millis_per_pixel = (Timeline.end - Timeline.start) / this.canvas.width;
 		 var new_start = Timeline.start + event.originalEvent.deltaY * millis_per_pixel;
@@ -221,7 +224,7 @@
 		 Timeline.start = new_start;
 		 Timeline.end += delta;
 		 for (var layer of layers) {
-		     layer.timeline.draw();
+		     layer.timeline.needs_redraw = true;
 		 }
 	     } else if (event.ctrlKey) {
 		 var pos = getMousePos(event, this.canvas);
@@ -234,7 +237,7 @@
 		     Timeline.start = new_start;
 		     Timeline.end = new_end;
 		     for (var layer of layers) {
-			 layer.timeline.draw();
+			 layer.timeline.needs_redraw = true;
 		     }
 		 }
 	     }
@@ -280,15 +283,30 @@
 		     } else {
 			 selection.splice(index, 1);
 		     }
+		     this.needs_redraw = true;
 		 }
 	     } else {
+		 for (var s of selection) {
+		     s.layer.timeline.needs_redraw = true;
+		 }
+		 this.needs_redraw = true;
 		 if (selected_event !== null) {
 		     selection = [selected_event];
 		 } else {
 		     selection = [];
 		 }
 	     }
-	     this.draw();
+	 }
+
+	 Timeline.prototype.recompute_max_rank = function() {
+	     var accumulate_max_rank = function(acc, value) {
+		 if (value.rank !== undefined && value.rank > acc) {
+		     return value.rank;
+		 }
+		 return acc;
+	     };
+	     this.max_rank = Math.max(this.layer.strokes.reduce(accumulate_max_rank, 0),
+				      this.layer.transforms.reduce(accumulate_max_rank, 0));
 	 }
 
 	 // END TIMELINE DEFINITION
@@ -347,10 +365,55 @@
 	 Layer.prototype.finalize_event = function(event) {
 	     this.timeline.assign_rank(event);
 	     // Update timeline to reflect new event
-	     this.timeline.draw();
+	     this.timeline.needs_redraw = true;
 	 }
 
 	 // END LAYER DEFINITION
+
+	 // Don't call this directly. Call remove_events, and pass an array of one event.
+	 function remove_event_impl(event, buckets, arr) {
+	     var index = arr.indexOf(event);
+	     if (index == -1) {
+		 console.log("ERROR: Trying to delete event, but can't find it in arr!");
+		 return;
+	     }
+	     arr.splice(index, 1);
+	     var start_bucket = Math.floor(event.begin() / bucket_size);
+	     var end_bucket = Math.floor(event.end() / bucket_size);
+	     for (var bucket = start_bucket; bucket <= end_bucket; bucket++) {
+		 if (!(bucket in buckets)) {
+		     console.log("ERROR: Trying to delete event, but missing bucket!");
+		     return;
+		 }
+		 var index = buckets[bucket].indexOf(event);
+		 if (index == -1) {
+		     console.log("ERROR: Trying to delete event, but can't find it in bucket!");
+		 }
+		 buckets[bucket].splice(index, 1);
+	     }
+
+	 }
+
+	 function remove_events(events) {
+	     var timelines_touched = new Set();
+	     for (var e of events) {
+		 if (e instanceof Stroke) {
+		     remove_event_impl(e, e.layer.stroke_buckets, e.layer.strokes);
+		     e.layer.last_draw = null;
+		 } else if (e instanceof Transform) {
+		     remove_event_impl(e, e.layer.transform_buckets, e.layer.transforms);
+		     e.layer.last_transform = null;
+		 } else {
+		     console.log("ERROR: Trying to remove unrecognized event type");
+		     return;
+		 }
+		 timelines_touched.add(e.layer.timeline);
+	     }
+	     for (var timeline of timelines_touched) {
+		 timeline.recompute_max_rank();
+		 timeline.needs_redraw = true;
+	     }
+	 }
 
 	 function addToBucket(buckets, index, item) {
 	     if (!(index in buckets)) {
@@ -479,21 +542,19 @@
 	     var i;
 	     for (i = 0; i < layers.length; i++) {
 		 draw(layers[i]);
+		 if (playing || changed || layers[i].timeline.needs_redraw) {
+		     // We need "playing or changed" instead of just "changed", because in the case
+		     // of mouse moves in the canvas area, the mouse move will update the current
+		     // project time, and apparently that happens at about the same time as this
+		     // tick, because in that case our call to set_project_time will see no difference,
+		     // so we will see changed === false. That will cause us not to update when we
+		     // should.
+		     layers[i].timeline.draw();
+		 }
 	     }
 	     if (playing) {
 		 // TODO: should I just make this part of set_current_project_time?
 		 $("#time").val(current_project_time / 1000);
-	     }
-	     if (playing || changed) {
-		 // We need "player or changed" instead of just "changed", because in the case
-		 // of mouse moves in the canvas area, the mouse move will update the current
-		 // project time, and apparently that happens at about the same time as this
-		 // tick, because in that case our call to set_project_time will see no difference,
-		 // so we will see changed === false. That will cause us not to update when we
-		 // should.
-		 for (i = 0; i < layers.length; i++) {
-		     layers[i].timeline.draw();
-		 }
 	     }
 	     window.requestAnimationFrame(tick);
 	 }
@@ -612,11 +673,12 @@
 
 	 // STROKE
 
-	 function Stroke(start, colour, width) {
+	 function Stroke(start, colour, width, layer) {
 	     this.start = start;
 	     this.colour = colour;
 	     this.width = width;
 	     this.pnts = [];
+	     this.layer = layer;
 	 }
 
 	 Stroke.prototype.push_events_into = function(arr) {
@@ -646,9 +708,10 @@
 
 	 // TRANSFORM
 
-	 function Transform(start) {
+	 function Transform(start, layer) {
 	     this.start = start;
 	     this.deltas = [];
+	     this.layer = layer;
 	 }
 
 	 function TransformEval(args) {
@@ -728,8 +791,8 @@
 		     this.initial_point = pnt;
 		     this.current_point = this.initial_point;
 		     var start_time = current_project_time;
-		     this.active_transform = new Transform(start_time);
 		     this.active_layer = current_layer;
+		     this.active_transform = new Transform(start_time, this.active_layer);
 		     this.active_layer.transforms.push(this.active_transform);
 		     this.active_bucket = Math.floor(start_time / bucket_size);
 		     addToBucket(this.active_layer.transform_buckets, this.active_bucket, this.active_transform);
@@ -824,7 +887,8 @@
 		 var start_time = current_project_time;
 		 this.active_stroke = new Stroke(start_time,
 						 get_current_colour(),
-						 get_current_width());
+						 get_current_width(),
+						 this.active_layer);
 		 this.active_stroke.pnts.push({
 		     x: pos.x,
 		     y: pos.y,
@@ -1020,7 +1084,7 @@
 		 })
 		 .appendTo(element);
 	     $(layer.timeline.canvas).appendTo(element);
-	     layer.timeline.draw();
+	     layer.timeline.needs_redraw = true;
 	     return element;
 	 }
 
@@ -1175,6 +1239,14 @@
 	     $("#stop").on("click", stop);
 	     $("#go").on("click", go);
 	     $("#new_layer").on("click", new_layer);
+
+	     // TODO: this is dumb, and also triggers on text edits ...
+	     $("body").on("keydown", function(e) {
+		 if (e.key == "Delete") {
+		     remove_events(selection);
+		     selection = [];
+		 }
+	     });
 
 	     var i;
 	     for (i = 0; i < actions.length; i++) {
