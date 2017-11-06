@@ -103,6 +103,7 @@
 	     jCanvas.on("mousedown", this.mousedown.bind(this));
 	     jCanvas.on("mouseup", this.mouseup.bind(this));
 	     jCanvas.on("mousemove", this.mousemove.bind(this));
+	     jCanvas.on("dblclick", this.dblclick.bind(this));
 
 	     this.max_rank = 0;
 	     this.y_offset = 0;
@@ -406,6 +407,14 @@
 	     this.mouse_moved = false;
 	     this.mouse_clicked = false;
 	     this.mousedown_evnt = null;
+	 }
+
+	 Timeline.prototype.dblclick = function(event) {
+	     if (!playing) {
+		 var pos = getMousePos(event, this.canvas);
+		 var time = pos.x / this.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
+		 last_project_time = time;
+	     }
 	 }
 
 	 Timeline.prototype.recompute_max_rank = function() {
