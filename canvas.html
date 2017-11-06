@@ -100,11 +100,18 @@
 	     this.canvas = jCanvas.get(0);
 	     this.ctx = this.canvas.getContext("2d");
 	     jCanvas.on("wheel", this.scroll.bind(this));
-	     jCanvas.on("click", this.click.bind(this));
+	     jCanvas.on("mousedown", this.mousedown.bind(this));
+	     jCanvas.on("mouseup", this.mouseup.bind(this));
+	     jCanvas.on("mousemove", this.mousemove.bind(this));
 
 	     this.max_rank = 0;
 	     this.y_offset = 0;
 	     this.needs_redraw = true;
+
+	     this.mouse_moved = false;
+	     this.mouse_clicked = false;
+	     this.mousedown_evnt = null;
+	     this.mouse_active = false;
 	 }
 
 	 // Shared timeline stuff
@@ -118,6 +125,7 @@
 	 Timeline.scale_per_pixel = 0.001;
 	 Timeline.min_time = 100; // ms
 	 Timeline.cursor_width = 1;
+	 Timeline.move_preview_delta = null;
 
 	 Timeline.prototype.get_max_y_offset = function() {
 	     return Math.max(0, (this.max_rank + 1) * Timeline.spacing - this.canvas.height);
@@ -184,6 +192,7 @@
 	     this.ctx.closePath();
 	     this.ctx.fill();
 
+	     // Draw the events
 	     for (var event of this.events_in_view()) {
 		 var [x1, y1, width, height] = this.get_rect(event);
 
@@ -191,6 +200,23 @@
 		 this.ctx.rect(x1, y1, width, height);
 		 this.ctx.fillStyle = this.get_colour(event);
 		 this.ctx.fill();
+	     }
+
+	     // Draw the move preview
+	     if (Timeline.move_preview_delta !== null) {
+		 for (var event of selection) {
+		     if (event.layer != this.layer) {
+			 continue;
+		     }
+		     var moved_event = event.shallow_copy();
+		     moved_event.start += Timeline.move_preview_delta;
+		     var [x1, y1, width, height] = this.get_rect(moved_event);
+
+		     this.ctx.beginPath();
+		     this.ctx.rect(x1, y1, width, height);
+		     this.ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+		     this.ctx.fill();
+		 }
 	     }
 
 	     // Draw the cursor
@@ -272,10 +298,75 @@
 	     return null;
 	 }
 
-	 Timeline.prototype.click = function(evnt) {
-	     var pos = getMousePos(evnt, this.canvas);
+
+	 Timeline.prototype.mousedown = function(evnt) {
+	     evnt.stopPropagation();
+	     this.mousedown_evnt = evnt;
+	     this.mouse_moved = false;
+	     this.mouse_clicked = false;
+	     this.mouse_active = true;
+
+	     // If we are overtop of an unselected event, then do a click right away. We do
+	     // this so that click-and-drag on an unselected event causes that event to move
+	     // as you would expect.
+	     var pos = getMousePos(this.mousedown_evnt, this.canvas);
 	     var selected_event = this.mouse_pos_to_event(pos);
-	     if (evnt.ctrlKey) {
+	     if (selected_event !== null && selection.indexOf(selected_event) == -1) {
+		 this.handle_click();
+		 this.mouse_clicked = true;
+	     }
+	 }
+
+	 Timeline.prototype.mousemove = function(evnt) {
+	     if (!this.mouse_active) {
+		 // If this mouse action wasn't started inside this Timeline, do nothing.
+		 return;
+	     }
+	     evnt.stopPropagation();
+	     var pos = getMousePos(evnt, this.canvas);
+	     if (pos != getMousePos(this.mousedown_evnt, this.canvas)) {
+		 this.mouse_moved = true;
+	     }
+	     if (this.mouse_moved) {
+		 // If we've moved, compute the time delta and set a global Timeline property
+		 // so all Timelines know they need to show a move preview.
+		 var initial_pos = getMousePos(this.mousedown_evnt, this.canvas);
+		 var current_time = pos.x / this.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
+		 var initial_time = initial_pos.x / this.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
+		 Timeline.move_preview_delta = current_time - initial_time;
+		 // Invalidate all timelines that have events in the selection, so that they will
+		 // redraw and show the move preview.
+		 for (var s of selection) {
+		     s.layer.timeline.needs_redraw = true;
+		 }
+	     }
+	 }
+
+	 Timeline.prototype.handle_move = function() {
+	     // Check that none of the movements result in a start time < 0, and if so bail
+	     var can_do_move = true;
+	     for (var e of selection) {
+		 if (e.start + Timeline.move_preview_delta < 0) {
+		     can_do_move = false;
+		 }
+		 // Regardless of whether or not the move succeeds, we need to redraw
+		 // every timeline in the selection.
+		 e.layer.timeline.needs_redraw = true;
+	     }
+	     if (can_do_move) {
+		 remove_events(selection);
+		 for (var e of selection) {
+		     e.start += Timeline.move_preview_delta;
+		 }
+		 add_events(selection);
+	     }
+	     Timeline.move_preview_delta = null;
+	 }
+
+	 Timeline.prototype.handle_click = function() {
+	     var pos = getMousePos(this.mousedown_evnt, this.canvas);
+	     var selected_event = this.mouse_pos_to_event(pos);
+	     if (this.mousedown_evnt.ctrlKey) {
 		 if (selected_event !== null) {
 		     var index = selection.indexOf(selected_event);
 		     if (index === -1) {
@@ -296,6 +387,25 @@
 		     selection = [];
 		 }
 	     }
+	 }
+
+	 Timeline.prototype.mouseup = function(evnt) {
+	     if (!this.mouse_active) {
+		 return;
+	     }
+	     evnt.stopPropagation();
+	     if (!this.mouse_moved) {
+		 if (!this.mouse_clicked) {
+		     // If we haven't already clicked in the mousedown event, do it now
+		     this.handle_click();
+		 }
+	     } else {
+		 this.handle_move();
+	     }
+	     this.mouse_active = false;
+	     this.mouse_moved = false;
+	     this.mouse_clicked = false;
+	     this.mousedown_evnt = null;
 	 }
 
 	 Timeline.prototype.recompute_max_rank = function() {
@@ -412,6 +522,34 @@
 	     for (var timeline of timelines_touched) {
 		 timeline.recompute_max_rank();
 		 timeline.needs_redraw = true;
+	     }
+	 }
+
+	 // Don't call this directly. Call add_events, and pass an array of one event.
+	 function add_event_impl(event, buckets, arr) {
+	     arr.push(event);
+	     var start_bucket = Math.floor(event.begin() / bucket_size);
+	     var end_bucket = Math.floor(event.end() / bucket_size);
+	     for (var bucket = start_bucket; bucket <= end_bucket; bucket++) {
+		 addToBucket(buckets, bucket, event);
+	     }
+	     event.rank = undefined;
+	     event.layer.finalize_event(event);
+	 }
+
+	 function add_events(events) {
+	     for (var e of events) {
+		 if (e instanceof Stroke) {
+		     add_event_impl(e, e.layer.stroke_buckets, e.layer.strokes);
+		     e.layer.last_draw = null;
+		 } else if (e instanceof Transform) {
+		     add_event_impl(e, e.layer.transform_buckets, e.layer.transforms);
+		     e.layer.last_transform = null;
+		 } else {
+		     console.log("ERROR: Trying to add unrecognized event type");
+		     return;
+		 }
+		 e.layer.timeline.needs_redraw = true;
 	     }
 	 }
 
@@ -706,6 +844,12 @@
 	     }
 	 }
 
+	 Stroke.prototype.shallow_copy = function() {
+	     var cpy = Object.create(this.__proto__);
+	     Object.assign(cpy, this);
+	     return cpy;
+	 }
+
 	 // TRANSFORM
 
 	 function Transform(start, layer) {
@@ -741,6 +885,12 @@
 	     } else {
 		 return this.start;
 	     }
+	 }
+
+	 Transform.prototype.shallow_copy = function() {
+	     var cpy = Object.create(this.__proto__);
+	     Object.assign(cpy, this);
+	     return cpy;
 	 }
 
 	 // TRANSFORM ACTION
