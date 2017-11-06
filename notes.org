@@ -80,3 +80,4 @@
 *** Now rename one of the current layers to "Layer 5"
 *** Create new layer
 *** Now you have duplicate layers!
+** TODO Need to "reflow" (aka assign new ranks) when an event is deleted
