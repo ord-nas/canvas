@@ -81,3 +81,10 @@
 *** Create new layer
 *** Now you have duplicate layers!
 ** TODO Need to "reflow" (aka assign new ranks) when an event is deleted
+* Improvements
+** TODO Improve drag handling
+*** Make global mouseup and mousemove events, attached to body
+*** A mousedown event registers global handlers
+*** Global mouseup and mousemove events delegate to the current handlers
+*** This allows you to start a drag inside a canvas (or other element) and continue outside it
+*** Also catch when the mouse leaves the entire body, and count that as mouseup
