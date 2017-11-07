@@ -109,10 +109,10 @@
 	     this.y_offset = 0;
 	     this.needs_redraw = true;
 
-	     this.mouse_moved = false;
-	     this.mouse_clicked = false;
-	     this.mousedown_evnt = null;
-	     this.mouse_active = false;
+	     this.active_mouse_action = null;
+
+	     this.window_preview_start = null;
+	     this.window_preview_end = null;
 	 }
 
 	 // Shared timeline stuff
@@ -170,7 +170,17 @@
 	 }
 
 	 Timeline.prototype.get_colour = function(event) {
-	     if (selection.indexOf(event) != -1) {
+	     // Preview window selection
+	     var preview_selection = false;
+	     if (this.window_preview_start !== null) {
+		 var [x1, y1, width, height] = this.get_rect(event);
+		 if (x1 >= this.window_preview_start &&
+		     x1 + width <= this.window_preview_end) {
+		     preview_selection = true;
+		 }
+	     }
+
+	     if (preview_selection || selection.indexOf(event) != -1) {
 		 // TODO: will need something better here when we start handling selections of
 		 // parts of events.
 		 return 'red';
@@ -192,6 +202,18 @@
 	     this.ctx.rect(0, 0, this.canvas.width, this.canvas.height);
 	     this.ctx.closePath();
 	     this.ctx.fill();
+
+	     // Draw the windows selection preview
+	     if (this.window_preview_start !== null) {
+		 console.log("HERE");
+		 this.ctx.beginPath();
+		 this.ctx.rect(this.window_preview_start,
+			       0,
+			       this.window_preview_end - this.window_preview_start,
+			       this.canvas.height);
+		 this.ctx.fillStyle = '#60646b';
+		 this.ctx.fill();
+	     }
 
 	     // Draw the events
 	     for (var event of this.events_in_view()) {
@@ -299,41 +321,17 @@
 	     return null;
 	 }
 
-
-	 Timeline.prototype.mousedown = function(evnt) {
-	     evnt.stopPropagation();
-	     this.mousedown_evnt = evnt;
-	     this.mouse_moved = false;
-	     this.mouse_clicked = false;
-	     this.mouse_active = true;
-
-	     // If we are overtop of an unselected event, then do a click right away. We do
-	     // this so that click-and-drag on an unselected event causes that event to move
-	     // as you would expect.
-	     var pos = getMousePos(this.mousedown_evnt, this.canvas);
-	     var selected_event = this.mouse_pos_to_event(pos);
-	     if (selected_event !== null && selection.indexOf(selected_event) == -1) {
-		 this.handle_click();
-		 this.mouse_clicked = true;
+	 function timeline_move_preview(evnt, move_action) {
+	     var pos = getMousePos(evnt, move_action.timeline.canvas);
+	     var initial_pos = getMousePos(move_action.mousedown_evnt, move_action.timeline.canvas);
+	     if (pos != initial_pos) {
+		 move_action.mouse_moved = true;
 	     }
-	 }
-
-	 Timeline.prototype.mousemove = function(evnt) {
-	     if (!this.mouse_active) {
-		 // If this mouse action wasn't started inside this Timeline, do nothing.
-		 return;
-	     }
-	     evnt.stopPropagation();
-	     var pos = getMousePos(evnt, this.canvas);
-	     if (pos != getMousePos(this.mousedown_evnt, this.canvas)) {
-		 this.mouse_moved = true;
-	     }
-	     if (this.mouse_moved) {
+	     if (move_action.mouse_moved) {
 		 // If we've moved, compute the time delta and set a global Timeline property
 		 // so all Timelines know they need to show a move preview.
-		 var initial_pos = getMousePos(this.mousedown_evnt, this.canvas);
-		 var current_time = pos.x / this.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
-		 var initial_time = initial_pos.x / this.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
+		 var current_time = pos.x / move_action.timeline.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
+		 var initial_time = initial_pos.x / move_action.timeline.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
 		 Timeline.move_preview_delta = current_time - initial_time;
 		 // Invalidate all timelines that have events in the selection, so that they will
 		 // redraw and show the move preview.
@@ -343,7 +341,7 @@
 	     }
 	 }
 
-	 Timeline.prototype.handle_move = function() {
+	 function timeline_move() {
 	     // Check that none of the movements result in a start time < 0, and if so bail
 	     var can_do_move = true;
 	     for (var e of selection) {
@@ -364,10 +362,113 @@
 	     Timeline.move_preview_delta = null;
 	 }
 
-	 Timeline.prototype.handle_click = function() {
-	     var pos = getMousePos(this.mousedown_evnt, this.canvas);
+	 function TimelineMoveAction1(evnt, timeline) {
+	     this.mousedown_evnt = evnt;
+	     this.timeline = timeline;
+	     this.mouse_moved = false;
+	 }
+	 TimelineMoveAction1.prototype.mousemove = function(evnt) {
+	     timeline_move_preview(evnt, this);
+	 }
+	 TimelineMoveAction1.prototype.mouseup = function(evnt) {
+	     if (this.mouse_moved) {
+		 timeline_move();
+	     }
+	 }
+
+	 function TimelineMoveAction2(evnt, timeline) {
+	     this.mousedown_evnt = evnt;
+	     this.timeline = timeline;
+	     this.mouse_moved = false;
+	 }
+	 TimelineMoveAction2.prototype.mousemove = function(evnt) {
+	     timeline_move_preview(evnt, this);
+	 }
+	 TimelineMoveAction2.prototype.mouseup = function(evnt) {
+	     if (this.mouse_moved) {
+		 timeline_move();
+	     } else {
+		 this.timeline.handle_click(this.mousedown_evnt);
+	     }
+	 }
+
+	 function TimelineMoveAction3(evnt, timeline) {
+	     this.mousedown_evnt = evnt;
+	     this.timeline = timeline;
+	     this.mouse_moved = false;
+	 }
+	 TimelineMoveAction3.prototype.mousemove = function(evnt) {
+	     var pos = getMousePos(evnt, this.timeline.canvas);
+	     var initial_pos = getMousePos(this.mousedown_evnt, this.timeline.canvas);
+	     if (pos != initial_pos) {
+		 this.mouse_moved = true;
+	     }
+	     if (this.mouse_moved) {
+		 // If we've moved, compute the time delta and set some properties
+		 // so that this.timeline knows it needs to show a window selection.
+		 this.timeline.window_preview_start = Math.min(pos.x, initial_pos.x);
+		 this.timeline.window_preview_end = Math.max(pos.x, initial_pos.x);
+		 this.timeline.needs_redraw = true;
+	     }
+	 }
+	 TimelineMoveAction3.prototype.mouseup = function(evnt) {
+	     if (this.mouse_moved) {
+		 this.timeline.handle_window_selection(this.mousedown_evnt);
+	     } else {
+		 this.timeline.handle_click(this.mousedown_evnt);
+	     }
+	     this.timeline.window_preview_start = null;
+	     this.timeline.window_preview_end = null;
+	     this.timeline.needs_redraw = true;
+	 }
+
+	 Timeline.prototype.mousedown = function(evnt) {
+	     // CASES:
+	     // 1. Mousedown on an unselected event:
+	     //    - Select event
+	     //    - Mousemove does a move preview, records move
+	     //    - Release does a move if applicable
+	     // 2. Mousedown on a selected event:
+	     //    - Records if ctrl key pressed
+	     //    - Mousemove does a move preview, records move
+	     //    - Release does a move if applicable, otherwise a click
+	     // 3. Mousedown on nothing:
+	     //    - Records if ctrl key pressed
+	     //    - Mousemove does a window selection preview, records move
+	     //    - Release does a windows selection if applicable, otherwise a click
+
+	     evnt.stopPropagation();
+
+	     // If we are overtop of an unselected event, then do a click right away. We do
+	     // this so that click-and-drag on an unselected event causes that event to move
+	     // as you would expect.
+	     var pos = getMousePos(evnt, this.canvas);
 	     var selected_event = this.mouse_pos_to_event(pos);
-	     if (this.mousedown_evnt.ctrlKey) {
+
+	     if (selected_event == null) {
+		 // Case 3
+		 this.active_mouse_action = new TimelineMoveAction3(evnt, this);
+	     } else if (selection.indexOf(selected_event) == -1) {
+		 // Case 1
+		 this.handle_click(evnt);
+		 this.active_mouse_action = new TimelineMoveAction1(evnt, this);
+	     } else {
+		 // Case 2
+		 this.active_mouse_action = new TimelineMoveAction2(evnt, this);
+	     }
+	 }
+
+	 Timeline.prototype.mousemove = function(evnt) {
+	     if (this.active_mouse_action) {
+		 evnt.stopPropagation();
+		 this.active_mouse_action.mousemove(evnt);
+	     }
+	 }
+
+	 Timeline.prototype.handle_click = function(mousedown_evnt) {
+	     var pos = getMousePos(mousedown_evnt, this.canvas);
+	     var selected_event = this.mouse_pos_to_event(pos);
+	     if (mousedown_evnt.ctrlKey) {
 		 if (selected_event !== null) {
 		     var index = selection.indexOf(selected_event);
 		     if (index === -1) {
@@ -390,23 +491,37 @@
 	     }
 	 }
 
-	 Timeline.prototype.mouseup = function(evnt) {
-	     if (!this.mouse_active) {
+	 Timeline.prototype.handle_window_selection = function(mousedown_evnt) {
+	     if (this.window_preview_start === null || this.window_preview_end === null) {
+		 console.log("ERROR: trying to do window selection, but got bad bounds");
 		 return;
 	     }
-	     evnt.stopPropagation();
-	     if (!this.mouse_moved) {
-		 if (!this.mouse_clicked) {
-		     // If we haven't already clicked in the mousedown event, do it now
-		     this.handle_click();
+
+	     if (!mousedown_evnt.ctrlKey) {
+		 for (var s of selection) {
+		     s.layer.timeline.needs_redraw = true;
 		 }
-	     } else {
-		 this.handle_move();
+		 selection = [];
 	     }
-	     this.mouse_active = false;
-	     this.mouse_moved = false;
-	     this.mouse_clicked = false;
-	     this.mousedown_evnt = null;
+	     for (var event of this.events_in_view()) {
+		 var [x1, y1, width, height] = this.get_rect(event);
+		 if (x1 >= this.window_preview_start &&
+		     x1 + width <= this.window_preview_end) {
+		     var index = selection.indexOf(event);
+		     if (index === -1) {
+			 selection.push(event);
+			 this.needs_redraw = true;
+		     }
+		 }
+	     }
+	 }
+
+	 Timeline.prototype.mouseup = function(evnt) {
+	     if (this.active_mouse_action) {
+		 evnt.stopPropagation();
+		 this.active_mouse_action.mouseup(evnt);
+		 this.active_mouse_action = null;
+	     }
 	 }
 
 	 Timeline.prototype.dblclick = function(event) {
