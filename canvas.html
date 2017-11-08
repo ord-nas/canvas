@@ -90,6 +90,17 @@
 	     };
 	 }
 
+	 function fake_event_like(event, start, end) {
+	     var e = Object.create(event);
+	     e.begin = function() {
+		 return start;
+	     }
+	     e.end = function() {
+		 return end;
+	     }
+	     return e;
+	 }
+
 	 // START TIMELINE DEFINITION
 
 	 function Timeline(layer) {
@@ -104,6 +115,9 @@
 	     jCanvas.on("mouseup", this.mouseup.bind(this));
 	     jCanvas.on("mousemove", this.mousemove.bind(this));
 	     jCanvas.on("dblclick", this.dblclick.bind(this));
+	     jCanvas.on("contextmenu", function(event) {
+		 event.preventDefault();
+	     });
 
 	     this.max_rank = 0;
 	     this.y_offset = 0;
@@ -127,6 +141,9 @@
 	 Timeline.min_time = 100; // ms
 	 Timeline.cursor_width = 1;
 	 Timeline.move_preview_delta = null;
+	 Timeline.scale_preview_factor = null
+	 Timeline.scale_preview_anchor = null
+	 Timeline.min_scale_amount = 0.01;
 
 	 Timeline.prototype.get_max_y_offset = function() {
 	     return Math.max(0, (this.max_rank + 1) * Timeline.spacing - this.canvas.height);
@@ -234,6 +251,24 @@
 		     var moved_event = event.shallow_copy();
 		     moved_event.start += Timeline.move_preview_delta;
 		     var [x1, y1, width, height] = this.get_rect(moved_event);
+
+		     this.ctx.beginPath();
+		     this.ctx.rect(x1, y1, width, height);
+		     this.ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+		     this.ctx.fill();
+		 }
+	     }
+
+	     // Draw the scale preview
+	     if (Timeline.scale_preview_factor !== null) {
+		 for (var event of selection) {
+		     if (event.layer != this.layer) {
+			 continue;
+		     }
+		     var scaled_start = Timeline.scale_preview_factor * (event.begin() - Timeline.scale_preview_anchor)  + Timeline.scale_preview_anchor;
+		     var scaled_end = Timeline.scale_preview_factor * (event.end() - Timeline.scale_preview_anchor)  + Timeline.scale_preview_anchor;
+		     var scaled_event = fake_event_like(event, scaled_start, scaled_end);
+		     var [x1, y1, width, height] = this.get_rect(scaled_event);
 
 		     this.ctx.beginPath();
 		     this.ctx.rect(x1, y1, width, height);
@@ -362,6 +397,26 @@
 	     Timeline.move_preview_delta = null;
 	 }
 
+	 function timeline_scale() {
+	     remove_events(selection);
+	     for (var e of selection) {
+		 e.start = Timeline.scale_preview_factor * (e.start - Timeline.scale_preview_anchor)  + Timeline.scale_preview_anchor;
+		 var arr = null;
+		 if (e instanceof Stroke) {
+		     arr = e.pnts;
+		 } else if (e instanceof Transform) {
+		     arr = e.deltas;
+		 } else {
+		     console.log("ERROR: Tried to scale, but got event in selection of unknown type");
+		     return;
+		 }
+		 for (var p of arr) {
+		     p.time *= Timeline.scale_preview_factor;
+		 }
+	     }
+	     add_events(selection);
+	 }
+
 	 function TimelineMoveAction1(evnt, timeline) {
 	     this.mousedown_evnt = evnt;
 	     this.timeline = timeline;
@@ -422,6 +477,42 @@
 	     this.timeline.needs_redraw = true;
 	 }
 
+	 function TimelineMoveAction4(anchor_time, evnt, timeline) {
+	     this.anchor_time = anchor_time;
+	     this.mousedown_evnt = evnt;
+	     this.timeline = timeline;
+	     this.mouse_moved = false;
+	 }
+	 TimelineMoveAction4.prototype.mousemove = function(evnt) {
+	     var pos = getMousePos(evnt, this.timeline.canvas);
+	     var time = pos.x / this.timeline.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
+	     var initial_pos = getMousePos(this.mousedown_evnt, this.timeline.canvas);
+	     var initial_time = initial_pos.x / this.timeline.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
+	     if (pos != initial_pos) {
+		 this.mouse_moved = true;
+	     }
+	     if (this.mouse_moved) {
+		 // If we've moved, compute the scale amount and set it as a property on
+		 // Timeline so that all timelines can do a scale preview.
+		 Timeline.scale_preview_anchor = this.anchor_time;
+		 Timeline.scale_preview_factor = (time - this.anchor_time) / (initial_time - this.anchor_time);
+		 Timeline.scale_preview_factor = Math.max(Timeline.scale_preview_factor, Timeline.min_scale_amount);
+		 for (var s of selection) {
+		     s.layer.timeline.needs_redraw = true;
+		 }
+	     }
+	 }
+	 TimelineMoveAction4.prototype.mouseup = function(evnt) {
+	     if (this.mouse_moved) {
+		 timeline_scale();
+	     }
+	     Timeline.scale_preview_factor = null;
+	     Timeline.scale_preview_anchor = null;
+	     for (var s of selection) {
+		 s.layer.timeline.needs_redraw = true;
+	     }
+	 }
+
 	 Timeline.prototype.mousedown = function(evnt) {
 	     // CASES:
 	     // 1. Mousedown on an unselected event:
@@ -436,6 +527,10 @@
 	     //    - Records if ctrl key pressed
 	     //    - Mousemove does a window selection preview, records move
 	     //    - Release does a windows selection if applicable, otherwise a click
+	     // 4. Right mousdown:
+	     //    - Records starting point
+	     //    - Mousemove does scale preview if applicable, records move
+	     //    - Release does a scale if applicable
 
 	     evnt.stopPropagation();
 
@@ -445,7 +540,17 @@
 	     var pos = getMousePos(evnt, this.canvas);
 	     var selected_event = this.mouse_pos_to_event(pos);
 
-	     if (selected_event == null) {
+	     if (evnt.which == 3) {
+		 // Case 4 - right click
+		 var [min_time, max_time] = this.get_selection_extremes();
+		 var pos = getMousePos(evnt, this.canvas);
+		 var time = pos.x / this.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
+		 if (min_time < time && max_time < time) {
+		     this.active_mouse_action = new TimelineMoveAction4(min_time, evnt, this);
+		 } else if (min_time > time && max_time > time) {
+		     this.active_mouse_action = new TimelineMoveAction4(max_time, evnt, this);
+		 }
+	     } else if (selected_event == null) {
 		 // Case 3
 		 this.active_mouse_action = new TimelineMoveAction3(evnt, this);
 	     } else if (selection.indexOf(selected_event) == -1) {
@@ -456,6 +561,20 @@
 		 // Case 2
 		 this.active_mouse_action = new TimelineMoveAction2(evnt, this);
 	     }
+	 }
+
+	 Timeline.prototype.get_selection_extremes = function() {
+	     var min_x = null;
+	     var max_x = null;
+	     for (var event of selection) {
+		 if (min_x === null || event.begin() < min_x) {
+		     min_x = event.begin()
+		 }
+		 if (max_x === null || event.end() > max_x) {
+		     max_x = event.end();
+		 }
+	     }
+	     return [min_x, max_x];
 	 }
 
 	 Timeline.prototype.mousemove = function(evnt) {
