@@ -548,7 +548,11 @@
 
 	     if (evnt.which == 3) {
 		 // Case 4 - right click
-		 var [min_time, max_time] = this.get_selection_extremes();
+		 if (evnt.ctrlKey) {
+		     var [min_time, max_time] = this.get_selection_begin_spread();
+		 } else {
+		     var [min_time, max_time] = this.get_selection_extremes();
+		 }
 		 if (min_time === null) {
 		     return;
 		 }
@@ -557,12 +561,7 @@
 		 if (min_time < time && max_time < time) {
 		     this.active_mouse_action = new TimelineMoveAction4(min_time, evnt, this);
 		 } else if (min_time > time && max_time > time) {
-		     if (evnt.ctrlKey) {
-			 var anchor_time = selection.map(function(e) {return e.begin(); }).reduce(function(a,b) {return Math.max(a,b); });
-			 this.active_mouse_action = new TimelineMoveAction4(anchor_time, evnt, this);
-		     } else {
-			 this.active_mouse_action = new TimelineMoveAction4(max_time, evnt, this);
-		     }
+		     this.active_mouse_action = new TimelineMoveAction4(max_time, evnt, this);
 		 }
 	     } else if (selected_event == null) {
 		 // Case 3
@@ -586,6 +585,20 @@
 		 }
 		 if (max_x === null || event.end() > max_x) {
 		     max_x = event.end();
+		 }
+	     }
+	     return [min_x, max_x];
+	 }
+
+	 Timeline.prototype.get_selection_begin_spread = function() {
+	     var min_x = null;
+	     var max_x = null;
+	     for (var event of selection) {
+		 if (min_x === null || event.begin() < min_x) {
+		     min_x = event.begin()
+		 }
+		 if (max_x === null || event.begin() > max_x) {
+		     max_x = event.begin();
 		 }
 	     }
 	     return [min_x, max_x];
