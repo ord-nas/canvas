@@ -141,8 +141,9 @@
 	 Timeline.min_time = 100; // ms
 	 Timeline.cursor_width = 1;
 	 Timeline.move_preview_delta = null;
-	 Timeline.scale_preview_factor = null
-	 Timeline.scale_preview_anchor = null
+	 Timeline.scale_preview_factor = null;
+	 Timeline.scale_preview_anchor = null;
+	 Timeline.scale_preview_stretch = null;
 	 Timeline.min_scale_amount = 0.01;
 
 	 Timeline.prototype.get_max_y_offset = function() {
@@ -222,7 +223,6 @@
 
 	     // Draw the windows selection preview
 	     if (this.window_preview_start !== null) {
-		 console.log("HERE");
 		 this.ctx.beginPath();
 		 this.ctx.rect(this.window_preview_start,
 			       0,
@@ -266,7 +266,9 @@
 			 continue;
 		     }
 		     var scaled_start = Timeline.scale_preview_factor * (event.begin() - Timeline.scale_preview_anchor)  + Timeline.scale_preview_anchor;
-		     var scaled_end = Timeline.scale_preview_factor * (event.end() - Timeline.scale_preview_anchor)  + Timeline.scale_preview_anchor;
+		     var scaled_end = Timeline.scale_preview_stretch ?
+				      Timeline.scale_preview_factor * (event.end() - Timeline.scale_preview_anchor)  + Timeline.scale_preview_anchor :
+				      scaled_start + (event.end() - event.begin());
 		     var scaled_event = fake_event_like(event, scaled_start, scaled_end);
 		     var [x1, y1, width, height] = this.get_rect(scaled_event);
 
@@ -401,6 +403,9 @@
 	     remove_events(selection);
 	     for (var e of selection) {
 		 e.start = Timeline.scale_preview_factor * (e.start - Timeline.scale_preview_anchor)  + Timeline.scale_preview_anchor;
+		 if (!Timeline.scale_preview_stretch) {
+		     continue;
+		 }
 		 var arr = null;
 		 if (e instanceof Stroke) {
 		     arr = e.pnts;
@@ -497,6 +502,7 @@
 		 Timeline.scale_preview_anchor = this.anchor_time;
 		 Timeline.scale_preview_factor = (time - this.anchor_time) / (initial_time - this.anchor_time);
 		 Timeline.scale_preview_factor = Math.max(Timeline.scale_preview_factor, Timeline.min_scale_amount);
+		 Timeline.scale_preview_stretch = !this.mousedown_evnt.ctrlKey;
 		 for (var s of selection) {
 		     s.layer.timeline.needs_redraw = true;
 		 }
@@ -543,12 +549,20 @@
 	     if (evnt.which == 3) {
 		 // Case 4 - right click
 		 var [min_time, max_time] = this.get_selection_extremes();
+		 if (min_time === null) {
+		     return;
+		 }
 		 var pos = getMousePos(evnt, this.canvas);
 		 var time = pos.x / this.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
 		 if (min_time < time && max_time < time) {
 		     this.active_mouse_action = new TimelineMoveAction4(min_time, evnt, this);
 		 } else if (min_time > time && max_time > time) {
-		     this.active_mouse_action = new TimelineMoveAction4(max_time, evnt, this);
+		     if (evnt.ctrlKey) {
+			 var anchor_time = selection.map(function(e) {return e.begin(); }).reduce(function(a,b) {return Math.max(a,b); });
+			 this.active_mouse_action = new TimelineMoveAction4(anchor_time, evnt, this);
+		     } else {
+			 this.active_mouse_action = new TimelineMoveAction4(max_time, evnt, this);
+		     }
 		 }
 	     } else if (selected_event == null) {
 		 // Case 3
