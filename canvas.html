@@ -21,6 +21,7 @@
 	 var current_project_time = 0;
 	 var current_seq_id = 0;
 	 var selection = [];
+	 var last_tick = null;
 
 	 var svg_element = null;
 	 function getIdentityMatrix() {
@@ -675,6 +676,8 @@
 		 var pos = getMousePos(event, this.canvas);
 		 var time = pos.x / this.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
 		 last_project_time = time;
+		 set_current_project_time();
+		 $("#time").val(current_project_time / 1000);
 	     }
 	 }
 
@@ -940,9 +943,8 @@
 	 }
 
 	 function tick() {
-	     var prev = current_project_time;
 	     set_current_project_time();
-	     var changed = (current_project_time != prev);
+	     var changed = (last_tick === null || last_tick != current_project_time);
 	     // TODO: prevent bad stuff, like deleting the last layer while a tool is in use!
 	     if (current_action && current_layer) {
 		 current_action.tick();
@@ -964,6 +966,7 @@
 		 // TODO: should I just make this part of set_current_project_time?
 		 $("#time").val(current_project_time / 1000);
 	     }
+	     last_tick = current_project_time;
 	     window.requestAnimationFrame(tick);
 	 }
 
