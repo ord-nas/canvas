@@ -12,6 +12,15 @@
 	 #rename-layer label, #rename-layer input { display:block; }
 	 #rename-layer input.text { margin-bottom:0px; width:95%; padding: .4em; }
 	 #rename-layer fieldset { padding:0; border:0; margin-top:10px; }
+	 html * {
+	     -webkit-touch-callout: none; /* iOS Safari */
+	     -webkit-user-select: none; /* Safari */
+	     -khtml-user-select: none; /* Konqueror HTML */
+	     -moz-user-select: none; /* Firefox */
+	     -ms-user-select: none; /* Internet Explorer/Edge */
+	     user-select: none; /* Non-prefixed version, currently
+                                   supported by Chrome and Opera */
+	 }
 	</style>
 	<script type="text/javascript">
 	 var bucket_size = 1000 * 5;
@@ -21,6 +30,7 @@
 	 var current_project_time = 0;
 	 var current_seq_id = 0;
 	 var selection = [];
+	 var global_mouse_action = null;
 	 var last_tick = null;
 
 	 var svg_element = null;
@@ -113,8 +123,6 @@
 	     this.ctx = this.canvas.getContext("2d");
 	     jCanvas.on("wheel", this.scroll.bind(this));
 	     jCanvas.on("mousedown", this.mousedown.bind(this));
-	     jCanvas.on("mouseup", this.mouseup.bind(this));
-	     jCanvas.on("mousemove", this.mousemove.bind(this));
 	     jCanvas.on("dblclick", this.dblclick.bind(this));
 	     jCanvas.on("contextmenu", function(event) {
 		 event.preventDefault();
@@ -123,8 +131,6 @@
 	     this.max_rank = 0;
 	     this.y_offset = 0;
 	     this.needs_redraw = true;
-
-	     this.active_mouse_action = null;
 
 	     this.window_preview_start = null;
 	     this.window_preview_end = null;
@@ -521,6 +527,9 @@
 	 }
 
 	 Timeline.prototype.mousedown = function(evnt) {
+	     if (global_mouse_action) {
+		 return;
+	     }
 	     // CASES:
 	     // 1. Mousedown on an unselected event:
 	     //    - Select event
@@ -560,20 +569,20 @@
 		 var pos = getMousePos(evnt, this.canvas);
 		 var time = pos.x / this.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
 		 if (min_time < time && max_time < time) {
-		     this.active_mouse_action = new TimelineMoveAction4(min_time, evnt, this);
+		     global_mouse_action = new TimelineMoveAction4(min_time, evnt, this);
 		 } else if (min_time > time && max_time > time) {
-		     this.active_mouse_action = new TimelineMoveAction4(max_time, evnt, this);
+		     global_mouse_action = new TimelineMoveAction4(max_time, evnt, this);
 		 }
 	     } else if (selected_event == null) {
 		 // Case 3
-		 this.active_mouse_action = new TimelineMoveAction3(evnt, this);
+		 global_mouse_action = new TimelineMoveAction3(evnt, this);
 	     } else if (selection.indexOf(selected_event) == -1) {
 		 // Case 1
 		 this.handle_click(evnt);
-		 this.active_mouse_action = new TimelineMoveAction1(evnt, this);
+		 global_mouse_action = new TimelineMoveAction1(evnt, this);
 	     } else {
 		 // Case 2
-		 this.active_mouse_action = new TimelineMoveAction2(evnt, this);
+		 global_mouse_action = new TimelineMoveAction2(evnt, this);
 	     }
 	 }
 
@@ -603,13 +612,6 @@
 		 }
 	     }
 	     return [min_x, max_x];
-	 }
-
-	 Timeline.prototype.mousemove = function(evnt) {
-	     if (this.active_mouse_action) {
-		 evnt.stopPropagation();
-		 this.active_mouse_action.mousemove(evnt);
-	     }
 	 }
 
 	 Timeline.prototype.handle_click = function(mousedown_evnt) {
@@ -660,14 +662,6 @@
 			 this.needs_redraw = true;
 		     }
 		 }
-	     }
-	 }
-
-	 Timeline.prototype.mouseup = function(evnt) {
-	     if (this.active_mouse_action) {
-		 evnt.stopPropagation();
-		 this.active_mouse_action.mouseup(evnt);
-		 this.active_mouse_action = null;
 	     }
 	 }
 
@@ -1587,24 +1581,35 @@
 	     update_layers();
 	 }
 
-	 function mouseup(event) {
-	     if (current_action && current_layer) {
+	 function body_mouseup(event) {
+	     if (global_mouse_action) {
+		 event.stopPropagation();
 		 set_current_project_time();
-		 current_action.mouseup(event);
+		 global_mouse_action.mouseup(event);
+		 global_mouse_action = null;
 	     }
 	 }
 
-	 function mousedown(event) {
+	 function body_mousemove(event) {
+	     if (global_mouse_action) {
+		 event.stopPropagation();
+		 set_current_project_time();
+		 global_mouse_action.mousemove(event);
+	     }
+	 }
+
+	 function canvas_mousedown(event) {
+	     if (global_mouse_action) {
+		 return;
+	     }
 	     if (current_action && current_layer) {
+		 event.stopPropagation();
 		 set_current_project_time();
 		 current_action.mousedown(event);
-	     }
-	 }
-
-	 function mousemove(event) {
-	     if (current_action && current_layer) {
-		 set_current_project_time();
-		 current_action.mousemove(event);
+		 global_mouse_action = {
+		     mousemove: function(event) { current_action.mousemove(event); },
+		     mouseup: function(event) { current_action.mouseup(event); },
+		 };
 	     }
 	 }
 
@@ -1654,9 +1659,10 @@
 	     var now = new Date();
 	     last_real_time = now.getTime();
 
-	     $("#tool-overlay").on("mousemove", mousemove);
-	     $("#tool-overlay").on("mouseup", mouseup);
-	     $("#tool-overlay").on("mousedown", mousedown);
+	     $("#tool-overlay").on("mousedown", canvas_mousedown);
+	     $("body").on("mousemove", body_mousemove);
+	     $("body").on("mouseup", body_mouseup);
+	     $("body").on("mouseleave", body_mouseup);
 
 	     $("#play").on("click", play);
 	     $("#stop").on("click", stop);
