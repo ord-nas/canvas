@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+	<meta charset="utf-8">
+	<title>nestedSortable jQuery Plugin</title>
+	<meta content="Demo page of the nestedSortable jQuery Plugin" name=
+	      "description">
+	<meta content="Manuele J Sarfatti" name="author">
+	<style type="text/css">
+	 .placeholder {
+	     outline: 1px dashed #4183C4;
+	 }
+
+	 .mjs-nestedSortable-error {
+	     background: #fbe3e4;
+	     border-color: transparent;
+	 }
+
+	 ol {
+	     padding-left: 25px;
+	 }
+
+	 ol.sortable,ol.sortable ol {
+	     list-style-type: none;
+	 }
+
+	 .sortable li div {
+	     border: 1px solid #d4d4d4;
+	     -webkit-border-radius: 3px;
+	     -moz-border-radius: 3px;
+	     border-radius: 3px;
+	     cursor: move;
+	     border-color: #D4D4D4 #D4D4D4 #BCBCBC;
+	     margin: 0;
+	     padding: 3px;
+	 }
+
+	 li.mjs-nestedSortable-collapsed.mjs-nestedSortable-hovering div {
+	     border-color: #999;
+	 }
+
+	 .sortable li.mjs-nestedSortable-collapsed > ol {
+	     display: none;
+	 }
+
+	 .sortable li.mjs-nestedSortable-branch > div > .disclose {
+	     display: inline-block;
+	 }
+
+	 .sortable span.ui-icon {
+	     display: inline-block;
+	     margin: 0;
+	     padding: 0;
+	 }
+
+	 .menuDiv {
+	     background: #EBEBEB;
+	 }
+
+	 .menuEdit {
+	     background: #FFF;
+	 }
+
+	 .itemTitle {
+	     vertical-align: middle;
+	     cursor: pointer;
+	 }
+
+	</style>
+	<script src="jquery-3.2.1.min.js"></script>
+	<script src="jquery-ui.js"></script>
+	<script type="text/javascript" src="nestedSortable/jquery.mjs.nestedSortable.js"></script>
+
+	<script>
+	 $().ready(function(){
+	     var ns = $('ol.sortable').nestedSortable({
+		 forcePlaceholderSize: true,
+		 handle: 'div',
+		 helper: 'clone',
+		 items: 'li',
+		 opacity: .6,
+		 placeholder: 'placeholder',
+		 revert: 250,
+		 tabSize: 25,
+		 tolerance: 'pointer',
+		 toleranceElement: '> div',
+	     });
+	 });
+	</script>
+    </head>
+
+    <body>
+	<ol class="sortable ui-sortable mjs-nestedSortable-branch mjs-nestedSortable-expanded">
+	    <li style="display: list-item;" class="mjs-nestedSortable-branch mjs-nestedSortable-expanded" id="menuItem_2">
+		<div class="menuDiv">
+		    <span>
+			<span class="itemTitle">a</span>
+		    </span>
+		    <div id="menuEdit2" class="menuEdit hidden">
+			<p>
+			    Content or form, or nothing here. Whatever you want.
+			</p>
+		    </div>
+		</div>
+	    </li>
+	    <li style="display: list-item;" class="mjs-nestedSortable-branch mjs-nestedSortable-expanded" id="menuItem_4">
+		<div class="menuDiv">
+		    <span>
+			<span class="itemTitle">c</span>
+		    </span>
+		    <div id="menuEdit4" class="menuEdit hidden">
+			<p>
+			    Content or form, or nothing here. Whatever you want.
+			</p>
+			</div>
+		</div>
+	    </li>
+	    <li class="mjs-nestedSortable-leaf" id="menuItem_6">
+		<div class="menuDiv">
+		    <span>
+			<span class="itemTitle">e</span>
+		    </span>
+		    <div id="menuEdit6" class="menuEdit hidden">
+			<p>
+			    Content or form, or nothing here. Whatever you want.
+			</p>
+		    </div>
+		</div>
+	    </li>
+	    <li style="display: list-item;" class="mjs-nestedSortable-leaf" id="menuItem_5">
+		<div class="menuDiv">
+		    <span>
+			<span class="itemTitle">d</span>
+		    </span>
+		    <div id="menuEdit5" class="menuEdit hidden">
+			<p>
+			    Content or form, or nothing here. Whatever you want.
+			</p>
+		    </div>
+		</div>
+	    </li>
+	    <li style="display: list-item;" class="mjs-nestedSortable-leaf" id="menuItem_7">
+		<div class="menuDiv">
+		    <span>
+			<span class="itemTitle">f</span>
+		    </span>
+		    <div id="menuEdit7" class="menuEdit hidden">
+			<p>
+			    Content or form, or nothing here. Whatever you want.
+			</p>
+		    </div>
+		</div>
+	    </li>
+	    <li class="mjs-nestedSortable-leaf" id="menuItem_3">
+		<div class="menuDiv">
+		    <span>
+			<span class="itemTitle">b</span>
+		    </span>
+		    <div id="menuEdit3" class="menuEdit hidden">
+			<p>
+			    Content or form, or nothing here. Whatever you want.
+			</p>
+		    </div>
+		</div>
+	    </li>
+	</ol>
+
+    </body>
+</html>
