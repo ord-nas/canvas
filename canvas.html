@@ -4,11 +4,50 @@
 	<link rel="stylesheet" href="jquery-ui.css">
 	<script src="jquery-3.2.1.min.js"></script>
 	<script src="jquery-ui.js"></script>
+	<script type="text/javascript" src="nestedSortable/jquery.mjs.nestedSortable.js"></script>
 	<style>
-	 #layer_selector { list-style-type: none; margin: 0; padding: 0; width: 100%; }
-	 #layer_selector li { margin: 0 3px 3px 3px; padding: 0.4em; padding-left: 1.5em; font-size: 1.4em; }
-	 #layer_selector li span.ui-icon { position: absolute; margin-left: -1.3em; }
-	 .ui-draggable, .ui-droppable { background-position: top; }
+	 .placeholder {
+	     outline: 1px dashed #4183C4;
+	 }
+	 .mjs-nestedSortable-error {
+	     background: #fbe3e4;
+	     border-color: transparent;
+	 }
+	 ol {
+	     padding-left: 25px;
+	 }
+	 ol.sortable,ol.sortable ol {
+	     list-style-type: none;
+	 }
+	 li.mjs-nestedSortable-collapsed.mjs-nestedSortable-hovering div {
+	     border-color: #999;
+	 }
+	 .sortable li.mjs-nestedSortable-collapsed > ol {
+	     display: none;
+	 }
+	 .sortable li.mjs-nestedSortable-branch > div > .disclose {
+	     display: inline-block;
+	 }
+	 .sortable span.ui-icon {
+	     display: inline-block;
+	     margin: 0;
+	     padding: 0;
+	 }
+	 .layerhandle-contents {
+	     border: 1px solid #d4d4d4;
+	     -webkit-border-radius: 3px;
+	     -moz-border-radius: 3px;
+	     border-radius: 3px;
+	     cursor: move;
+	     border-color: #D4D4D4 #D4D4D4 #BCBCBC;
+	     margin: 0;
+	     padding: 3px;
+	     background: #EBEBEB;
+	 }
+	 .layer-title {
+	     vertical-align: middle;
+	     cursor: pointer;
+	 }
 	 #rename-layer label, #rename-layer input { display:block; }
 	 #rename-layer input.text { margin-bottom:0px; width:95%; padding: .4em; }
 	 #rename-layer fieldset { padding:0; border:0; margin-top:10px; }
@@ -697,7 +736,7 @@
 	     $("#layer_set").append(jCanvas);
 	     this.canvas = jCanvas.get(0);
 	     this.title = title;
-	     this.key = "l" + id;
+	     this.handle_id = "layerhandle_" + id;
 	     this.ctx = this.canvas.getContext("2d");
 	     addMatrixTrackingToContext(this.ctx);
 
@@ -1481,45 +1520,87 @@
 	     return [make_rename_dialog, begin_rename_layer];
 	 })();
 
+	 function resize_timelines() {
+	     var min_target_width = null;
+	     for (var layer of layers) {
+		 var total_width = $(layer.timeline.canvas).parent().width();
+		 var header_width = $(layer.timeline.canvas).parent().parent().find(".layerhandle-header").width();
+		 var target_width = total_width - header_width - 50;
+		 // TODO: Handle case where target width is less than zero.
+		 if (min_target_width === null || target_width < min_target_width) {
+		     min_target_width = target_width;
+		 }
+	     }
+	     if (min_target_width === null) {
+		 // There are no layers!
+		 return;
+	     }
+	     for (var layer of layers) {
+		 layer.timeline.canvas.width = min_target_width;
+		 layer.timeline.needs_redraw = true;
+	     }
+	 }
+
 	 function create_layer_handle(layer) {
-	     var element = $('<li class="ui-state-default"><span class="ui-icon ui-icon-arrowthick-2-n-s"></span></li>');
-	     $("<input type='radio' name='layer_handle'>")
-		 .attr("value", layer.key)
-		 .appendTo(element)
-		 .change(update_layers);
-	     $("<span class='layer-name'>")
-		 .append(document.createTextNode(layer.title))
-		 .appendTo(element);
-	     $("<button type='button' class='layer-rename'>rename</button>")
-		 .click(function() {
-		     begin_rename_layer(layer);
-		 })
-		 .appendTo(element);
-	     $("<button type='button' class='layer-delete'>delete</button>")
-		 .click(function() {
-		     delete_layer(layer);
-		 })
-		 .appendTo(element);
-	     $(layer.timeline.canvas).appendTo(element);
+	     var element = $(`
+	     <li style="display: list-item;" class="mjs-nestedSortable-branch mjs-nestedSortable-expanded" id="menuItem_2">
+		<div class="layerhandle-contents">
+		    <span class="layerhandle-header">
+		        <input type='radio' name='layerhandle-radio'>
+		        <span class='layer-title'></span>
+		        <button type='button' class='layer-rename'>rename</button>
+		        <button type='button' class='layer-delete'>delete</button>
+		    </span>
+		    <div class='layer-timeline' style="display: flex; justify-content: flex-end"></div>
+		</div>
+	     </li>`);
+	     element.attr('id', layer.handle_id);
+	     element.find('.layer-title').text(layer.title);
+	     element.find('.layer-rename').click(function() {
+		 console.log('LAYER RENAME PLACEHOLDER!');
+		 //begin_rename_layer(layer);
+	     })
+	     element.find('.layer-delete').click(function() {
+		 console.log('LAYER DELETE PLACEHOLDER!');
+		 //delete_layer(layer);
+	     })
+	     element.find('.layer-timeline').append(layer.timeline.canvas);
 	     layer.timeline.needs_redraw = true;
 	     return element;
 	 }
 
+	 function get_layer_handles_in_order_helper(objs, arr) {
+	     for (var obj of objs) {
+		 arr.push("layerhandle_" + obj.id);
+		 if (obj.children !== undefined) {
+		     get_layer_handles_in_order_helper(obj.children, arr);
+		 }
+	     }
+	 }
+
+	 function get_layer_handles_in_order() {
+	     var hierarchy = $("#layer_selector").nestedSortable('toHierarchy', {startDepthCount: 0});
+	     var ids_in_order = [];
+	     get_layer_handles_in_order_helper(hierarchy, ids_in_order);
+	     return ids_in_order;
+	 }
+
 	 function update_layers() {
-	     var layer_handles = $("#layer_selector li input");
+	     var layer_handle_ids = get_layer_handles_in_order();
 	     var in_order = [];
 	     var i;
 
 	     // Re-sort layers based on the order of the layer handles
-	     for (i = 0; i < layer_handles.length; i++) {
+	     for (var id of layer_handle_ids) {
 		 var index = layers.findIndex(function(e) {
-		     return e.key === layer_handles.eq(i).attr("value");
+		     return e.handle_id === id;
 		 });
 		 if (index !== -1) {
 		     in_order.push(layers[index]);
 		     layers.splice(index, 1);
 		 } else {
-		     layer_handles.parent().eq(i).remove();
+		     // TODO DELETE LAYER HANDLE
+		     //layer_handles.parent().eq(i).remove();
 		 }
 	     }
 
@@ -1530,6 +1611,10 @@
 	     }
 
 	     layers = in_order.concat(layers);
+
+	     resize_timelines();
+
+	     return;
 
 	     // Handle renames
 	     layer_titles = $("#layer_selector li span.layer-name");
@@ -1697,8 +1782,20 @@
 
 	     // Create the layers
 	     layers = [];
-	     $( "#layer_selector" ).sortable({
-		 update: update_layers,
+	     $( "#layer_selector" ).nestedSortable({
+		 forcePlaceholderSize: true,
+		 handle: 'div',
+		 helper: 'clone',
+		 items: 'li',
+		 opacity: .6,
+		 placeholder: 'placeholder',
+		 revert: 250,
+		 tabSize: 25,
+		 tolerance: 'pointer',
+		 toleranceElement: '> div',
+		 stop: function() {
+		     update_layers();
+		 },
 	     });
 	     $( "#layer_selector" ).disableSelection();
 	     update_layers();
@@ -1713,6 +1810,11 @@
 
 	     // Set up the layer rename dialog
 	     make_rename_dialog();
+
+	     // Set up a resize handler to resize the timelines
+	     // TODO: this might act badly if we resize the window while we are
+	     // moving layers around.
+	     $( window ).resize(resize_timelines);
 
 	     window.requestAnimationFrame(tick);
 	 });
@@ -1742,7 +1844,7 @@
 	    Stroke width: <span id="stroke_width" style="display:inline-block;width:200px;margin-left:15px"></span>
 	</p>
 	<p>Layers <button type="button" id="new_layer">New</button></p>
-	<ul id="layer_selector"></ul>
+	<ol id="layer_selector" class="sortable ui-sortable mjs-nestedSortable-branch mjs-nestedSortable-expanded"></ol>
 	<br>
 	<div id="layer_set" style="position:relative">
 	    <canvas id="background" height="720px" width="1280px" style="z-index:0;position:absolute;left:0px;top:0px">
