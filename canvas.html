@@ -1543,7 +1543,7 @@
 
 	 function create_layer_handle(layer) {
 	     var element = $(`
-	     <li style="display: list-item;" class="mjs-nestedSortable-branch mjs-nestedSortable-expanded" id="menuItem_2">
+	     <li style="display: list-item;" class="mjs-nestedSortable-branch mjs-nestedSortable-expanded">
 		<div class="layerhandle-contents">
 		    <span class="layerhandle-header">
 		        <input type='radio' name='layerhandle-radio'>
@@ -1556,13 +1556,12 @@
 	     </li>`);
 	     element.attr('id', layer.handle_id);
 	     element.find('.layer-title').text(layer.title);
+	     element.find('input[name="layerhandle-radio"]').click(update_layers);
 	     element.find('.layer-rename').click(function() {
-		 console.log('LAYER RENAME PLACEHOLDER!');
-		 //begin_rename_layer(layer);
+		 begin_rename_layer(layer);
 	     })
 	     element.find('.layer-delete').click(function() {
-		 console.log('LAYER DELETE PLACEHOLDER!');
-		 //delete_layer(layer);
+		 delete_layer(layer);
 	     })
 	     element.find('.layer-timeline').append(layer.timeline.canvas);
 	     layer.timeline.needs_redraw = true;
@@ -1585,6 +1584,32 @@
 	     return ids_in_order;
 	 }
 
+	 function set_layer_relationships_helper(parent, layer_dict) {
+	     var parent_obj = layer_dict["layerhandle_" + parent.id];
+	     parent_obj.children = [];
+	     if (parent.children !== undefined) {
+		 for (var child of parent.children) {
+		     var child_obj = layer_dict["layerhandle_" + child.id];
+		     child_obj.parent = parent_obj;
+		     parent_obj.children.push(child_obj);
+		     set_layer_relationships_helper(child, layer_dict);
+		 }
+	     }
+	 }
+
+	 function set_layer_relationships() {
+	     var hierarchy = $("#layer_selector").nestedSortable('toHierarchy', {startDepthCount: 0});
+	     var layer_dict = {};
+	     for (var layer of layers) {
+		 layer_dict[layer.handle_id] = layer;
+	     }
+	     for (var obj of hierarchy) {
+		 console.log("layerhandle_" + obj.id);
+		 layer_dict["layerhandle_" + obj.id].parent = null;
+		 set_layer_relationships_helper(obj, layer_dict);
+	     }
+	 }
+
 	 function update_layers() {
 	     var layer_handle_ids = get_layer_handles_in_order();
 	     var in_order = [];
@@ -1599,8 +1624,11 @@
 		     in_order.push(layers[index]);
 		     layers.splice(index, 1);
 		 } else {
-		     // TODO DELETE LAYER HANDLE
-		     //layer_handles.parent().eq(i).remove();
+		     // Handle deletes.
+		     // Note: this selector may be empty if it's a child of an already-deleted layer.
+		     // But that's okay. The deletion will gracefully fail and do nothing, which is
+		     // exactly what we want.
+		     $("#" + id).closest("li").remove();
 		 }
 	     }
 
@@ -1612,38 +1640,59 @@
 
 	     layers = in_order.concat(layers);
 
-	     resize_timelines();
-
-	     return;
+	     // Set layer parent and child pointers
+	     set_layer_relationships();
 
 	     // Handle renames
-	     layer_titles = $("#layer_selector li span.layer-name");
-	     for (i = 0; i < layers.length; i++) {
-		 layer_titles.eq(i).text(layers[i].title);
+	     for (var layer of layers) {
+		 $("#" + layer.handle_id).find(".layer-title").first().text(layer.title);
 	     }
 
 	     // Reorder the actual canvas elements
 	     for (i = 0; i < layers.length; i++) {
 		 $(layers[i].canvas).css("z-index", layers.length-i);
 	     }
-
 	     $("#tool-overlay").css("z-index", layers.length+1);
 
-	     // If no element is selected, select the first one
-	     var selected = $("#layer_selector li input:checked");
-	     if (selected.length === 0) {
-		 $("#layer_selector li:first-child input").attr("checked", "checked");
+	     // Resize the timeline (since there is more/less space available if the maximum
+	     // nesting level descreased/increased).
+	     resize_timelines();
+
+	     // Now, the rest is about selecting layers. If there are no layers, just leave.
+	     if (layers.length === 0) {
+		 current_layer = null;
+		 return;
 	     }
 
-	     // Set the current layer based on the selected
-	     current_layer = null;
-	     var selected = $("#layer_selector li input:checked").get(0);
-	     if (selected !== undefined) {
-		 for (i = 0; i < layers.length; i++) {
-		     if (layers[i].key == selected.value) {
-			 current_layer = layers[i];
+	     // If the current layer was deleted, clear selection
+	     if (layers.indexOf(current_layer) === -1) {
+		 current_layer = null;
+	     }
+
+	     var selected = $("#layer_selector input[name='layerhandle-radio']:checked");
+
+	     // Now there are three cases:
+	     if (selected.length > 0) {
+		 // Change the selection
+		 var handle_id = selected.closest("li").attr("id");
+		 for (var layer of layers) {
+		     if (layer.handle_id === handle_id) {
+			 current_layer = layer;
 			 break;
 		     }
+		 }
+	     } else {
+		 if (current_layer === null) {
+		     // If no element is selected, select the first one
+		     current_layer = layers[0];
+		     $("#" + current_layer.handle_id)
+			 .find("input[name='layerhandle-radio']").first()
+			 .prop("checked", true);
+		 } else { // current_layer !== null
+		     // Checkbox was unset by a move. Reset it.
+		     $("#" + current_layer.handle_id)
+		         .find("input[name='layerhandle-radio']").first()
+			 .prop("checked", true);
 		 }
 	     }
 	 }
@@ -1654,15 +1703,24 @@
 	     update_layers();
 	 }
 
+	 function get_layer_descendants(layer, descendants) {
+	     descendants.add(layer.id);
+	     for (var child of layer.children) {
+		 get_layer_descendants(child, descendants);
+	     }
+	 }
+
 	 function delete_layer(layer) {
-	     var i;
-	     for (i = 0; i < layers.length; i++) {
-		 if (layers[i] == layer) {
+	     var targets = new Set();
+	     get_layer_descendants(layer, targets);
+	     for (i = 0; i < layers.length;) {
+		 if (targets.has(layers[i].id)) {
+		     layers[i].delete();
 		     layers.splice(i, 1);
-		     break;
+		 } else {
+		     ++i;
 		 }
 	     }
-	     layer.delete();
 	     update_layers();
 	 }
 
