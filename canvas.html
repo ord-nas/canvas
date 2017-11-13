@@ -741,6 +741,7 @@
 	     this.handle_id = "layerhandle_" + id;
 	     this.ctx = this.canvas.getContext("2d");
 	     addMatrixTrackingToContext(this.ctx);
+	     this.matrices = [getIdentityMatrix()];
 
 	     this.timeline = new Timeline(this);
 
@@ -753,6 +754,27 @@
 	     this.strokes = [];
 	     this.transform_buckets = {};
 	     this.transforms = [];
+	 }
+
+	 Layer.prototype.set_parent = function(parent) {
+	     var old_parent = this.parent;
+	     this.parent = parent;
+	     if (parent !== old_parent) {
+		 this.last_transform = null;
+		 var ancestors = new Set();
+		 get_layer_ancestors(this, ancestors);
+		 this.matrices = [];
+		 for (var i = 0; i < ancestors.size; ++i) {
+		     this.matrices.push(getIdentityMatrix());
+		 }
+	     }
+	 }
+
+	 Layer.prototype.resetTransform = function() {
+	     for (var i = 0; i < this.matrices.length; ++i) {
+		 this.matrices[i] = getIdentityMatrix();
+	     }
+	     this.ctx.resetTransform();
 	 }
 
 	 Layer.prototype.clear_temp_canvas = function() {
@@ -818,9 +840,11 @@
 		 if (e instanceof Stroke) {
 		     remove_event_impl(e, e.layer.stroke_buckets, e.layer.strokes);
 		     e.layer.last_draw = null;
+		     // TODO: need to reset last transform of descendants too!
 		 } else if (e instanceof Transform) {
 		     remove_event_impl(e, e.layer.transform_buckets, e.layer.transforms);
 		     e.layer.last_transform = null;
+		     // TODO: need to reset last transform of descendants too!
 		 } else {
 		     console.log("ERROR: Trying to remove unrecognized event type");
 		     return;
@@ -850,9 +874,11 @@
 		 if (e instanceof Stroke) {
 		     add_event_impl(e, e.layer.stroke_buckets, e.layer.strokes);
 		     e.layer.last_draw = null;
+		     // TODO: need to reset last transform of descendants too!
 		 } else if (e instanceof Transform) {
 		     add_event_impl(e, e.layer.transform_buckets, e.layer.transforms);
 		     e.layer.last_transform = null;
+		     // TODO: need to reset last transform of descendants too!
 		 } else {
 		     console.log("ERROR: Trying to add unrecognized event type");
 		     return;
@@ -970,11 +996,32 @@
 	     return evalPeriod(start, end, layer.stroke_buckets, [ctx]);
 	 }
 
-	 function transformPeriod(start, end, layer, ctx) {
+	 function transformPeriod(start, end, layer, ctx, matrices) {
 	     if (ctx === undefined) {
 		 ctx = layer.ctx;
 	     }
-	     return evalPeriod(start, end, layer.transform_buckets, [ctx]);
+	     if (matrices === undefined) {
+		 matrices = layer.matrices;
+	     }
+	     var current_layer = layer;
+	     var performed_action = false;
+	     for (var i = 0; i < matrices.length; ++i) {
+		 // TODO this is ugly, but we hold on to the args list because when we
+		 // multiply matrices we get a new matrix, so if we want to actually get
+		 // out the value that we compute at the end of this, we put it into a
+		 // list so that we can set the list element to be the new matrix.
+		 var args = [matrices[i]];
+		 performed_action = evalPeriod(start, end, current_layer.transform_buckets, args) || performed_action;
+		 matrices[i] = args[0];
+		 current_layer = current_layer.parent;
+	     }
+	     var total_matrix = getIdentityMatrix();
+	     for (var matrix of matrices) {
+		 total_matrix = matrix.multiply(total_matrix);
+	     }
+	     ctx.setMatrix(total_matrix);
+	     //return evalPeriod(start, end, layer.transform_buckets, [ctx]);
+	     return performed_action;
 	 }
 
 	 function tick() {
@@ -1018,7 +1065,7 @@
 		 layer.last_transform === null ||
 		 compare_events(now, layer.last_transform) < 0) {
 		 console.log("RESET TRANSFORM (STANDARD)");
-		 layer.ctx.resetTransform();
+		 layer.resetTransform();
 		 transformPeriod(0, now, layer);
 		 transform_changed = true;
 	     } else  {
@@ -1071,7 +1118,7 @@
 	 }
 
 	 function draw(layer) {
-	     if (layer.redraw_on_transform_change) {
+	     if (true || layer.redraw_on_transform_change) {
 		 standard_draw(layer);
 	     } else {
 		 post_transform_draw(layer);
@@ -1167,8 +1214,7 @@
 	 }
 
 	 function TransformEval(args) {
-	     var ctx = args[0];
-	     ctx.transformWithMatrix(this.m);
+	     args[0] = this.m.multiply(args[0]);
 	 }
 
 	 Transform.prototype.push_events_into = function(arr) {
@@ -1592,7 +1638,7 @@
 	     if (parent.children !== undefined) {
 		 for (var child of parent.children) {
 		     var child_obj = layer_dict["layerhandle_" + child.id];
-		     child_obj.parent = parent_obj;
+		     child_obj.set_parent(parent_obj);
 		     parent_obj.children.push(child_obj);
 		     set_layer_relationships_helper(child, layer_dict);
 		 }
@@ -1607,7 +1653,7 @@
 	     }
 	     for (var obj of hierarchy) {
 		 console.log("layerhandle_" + obj.id);
-		 layer_dict["layerhandle_" + obj.id].parent = null;
+		 layer_dict["layerhandle_" + obj.id].set_parent(null);
 		 set_layer_relationships_helper(obj, layer_dict);
 	     }
 	 }
@@ -1712,6 +1758,13 @@
 	     }
 	 }
 
+	 function get_layer_ancestors(layer, ancestors) {
+	     ancestors.add(layer.id);
+	     if (layer.parent !== null) {
+		 get_layer_ancestors(layer.parent, ancestors);
+	     }
+	 }
+
 	 function delete_layer(layer) {
 	     var targets = new Set();
 	     get_layer_descendants(layer, targets);
@@ -1798,8 +1851,6 @@
 
 	 $(document).ready(function () {
 	     last_project_time = 0;
-	     last_draw = null;
-	     last_transform = null;
 
 	     var now = new Date();
 	     last_real_time = now.getTime();
