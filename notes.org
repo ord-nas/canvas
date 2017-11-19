@@ -81,6 +81,9 @@
 *** Create new layer
 *** Now you have duplicate layers!
 ** TODO Need to "reflow" (aka assign new ranks) when an event is deleted
+** TODO Two instantaneous events at slightly different times will overlap in the Timeline UI
+** TODO When transform events are deleted/changed, need to update descendants of layer as well as just the layer itself
+** TODO Need to add nesting-awareness to post_transform_draw
 * Improvements
 ** DONE Improve drag handling
 *** Make global mouseup and mousemove events, attached to body
