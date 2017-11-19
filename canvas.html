@@ -742,6 +742,7 @@
 	     this.ctx = this.canvas.getContext("2d");
 	     addMatrixTrackingToContext(this.ctx);
 	     this.matrices = [getIdentityMatrix()];
+	     this.ancestors = [this];
 
 	     this.timeline = new Timeline(this);
 
@@ -754,20 +755,8 @@
 	     this.strokes = [];
 	     this.transform_buckets = {};
 	     this.transforms = [];
-	 }
 
-	 Layer.prototype.set_parent = function(parent) {
-	     var old_parent = this.parent;
-	     this.parent = parent;
-	     if (parent !== old_parent) {
-		 this.last_transform = null;
-		 var ancestors = new Set();
-		 get_layer_ancestors(this, ancestors);
-		 this.matrices = [];
-		 for (var i = 0; i < ancestors.size; ++i) {
-		     this.matrices.push(getIdentityMatrix());
-		 }
-	     }
+	     this.parent = null;
 	 }
 
 	 Layer.prototype.resetTransform = function() {
@@ -1056,6 +1045,18 @@
 	 var always_reset_transform = false;
 
 	 function standard_draw(layer) {
+	     // Check if our layer ancestors have changed since last draw
+	     var new_ancestors = [];
+	     get_layer_ancestors(layer, new_ancestors);
+	     if (!shallow_array_equals(new_ancestors, layer.ancestors)) {
+		 console.log("LAYER ANCESTORS CHANGED: " + layer.title);
+		 layer.last_transform = null;
+		 layer.ancestors = new_ancestors;
+		 layer.matrices = [];
+		 for (var i = 0; i < new_ancestors.length; ++i) {
+		     layer.matrices.push(getIdentityMatrix());
+		 }
+	     }
 	     var now = {
 		 time: current_project_time,
 		 seq_id: current_seq_id,
@@ -1638,7 +1639,7 @@
 	     if (parent.children !== undefined) {
 		 for (var child of parent.children) {
 		     var child_obj = layer_dict["layerhandle_" + child.id];
-		     child_obj.set_parent(parent_obj);
+		     child_obj.parent = parent_obj;
 		     parent_obj.children.push(child_obj);
 		     set_layer_relationships_helper(child, layer_dict);
 		 }
@@ -1652,8 +1653,7 @@
 		 layer_dict[layer.handle_id] = layer;
 	     }
 	     for (var obj of hierarchy) {
-		 console.log("layerhandle_" + obj.id);
-		 layer_dict["layerhandle_" + obj.id].set_parent(null);
+		 layer_dict["layerhandle_" + obj.id].parent = null;
 		 set_layer_relationships_helper(obj, layer_dict);
 	     }
 	 }
@@ -1759,10 +1759,14 @@
 	 }
 
 	 function get_layer_ancestors(layer, ancestors) {
-	     ancestors.add(layer.id);
+	     ancestors.push(layer);
 	     if (layer.parent !== null) {
 		 get_layer_ancestors(layer.parent, ancestors);
 	     }
+	 }
+
+	 function shallow_array_equals(a1, a2) {
+	     return a1.length==a2.length && a1.every(function(v,i) { return v === a2[i]});
 	 }
 
 	 function delete_layer(layer) {
