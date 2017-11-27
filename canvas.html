@@ -1107,15 +1107,27 @@
 	 }
 
 	 function post_transform_draw(layer) {
+	     // Check if our layer ancestors have changed since last draw
+	     var new_ancestors = get_layer_ancestors(layer);
+	     if (!shallow_array_equals(new_ancestors, layer.ancestors)) {
+		 console.log("LAYER ANCESTORS CHANGED: " + layer.title);
+		 layer.last_transform = null;
+		 layer.ancestors = new_ancestors;
+		 layer.matrices = [];
+		 for (var i = 0; i < new_ancestors.length; ++i) {
+		     layer.matrices.push(getIdentityMatrix());
+		 }
+	     }
 	     var temp_canvas = layer.get_temp_canvas();
 	     var temp_ctx = temp_canvas.getContext("2d");
 	     var now = {
 		 time: current_project_time,
 		 seq_id: current_seq_id,
 	     };
-	     if (layer.last_draw === null || compare_events(now, layer.last_draw) < 0) {
-		 console.log("RESET TRANSFORM (POST)");
-		 layer.ctx.resetTransform();
+	     if (layer.last_draw === null || compare_events(now, layer.last_draw) < 0 ||
+		 layer.last_transform === null || compare_events(now, layer.last_transform) < 0) {
+		 console.log("RESET TRANSFORM & DRAW (POST)");
+		 layer.resetTransform();
 		 transformPeriod(0, now, layer);
 		 console.log("CLEAR (POST)");
 		 clear(layer.ctx);
@@ -1124,19 +1136,23 @@
 		 layer.last_transform = now;
 	     } else {
 		 drawPeriod(layer.last_draw, now, layer, temp_ctx);
-		 layer.ctx.resetTransform();
-		 clear(layer.ctx);
+		 var old_m = layer.ctx._matrix;
+		 var old_matrices = layer.matrices.slice(); // copy
 		 transformPeriod(layer.last_transform, now, layer);
+		 var delta = layer.ctx._matrix.multiply(invert(old_m));
+		 clear(layer.ctx);
+		 layer.ctx.setMatrix(delta);
 		 layer.ctx.drawImage(temp_canvas, 0, 0);
 		 // Do this just to leave layer.ctx's matrix in a state that
 		 // standard_draw expects.
-		     layer.ctx.setMatrix(temp_ctx._matrix);
+		 layer.ctx.setMatrix(old_m);
+		 layer.matrices = old_matrices;
 	     }
 	     layer.last_draw = now;
 	 }
 
 	 function draw(layer) {
-	     if (true || layer.redraw_on_transform_change) {
+	     if (layer.redraw_on_transform_change) {
 		 standard_draw(layer);
 	     } else {
 		 post_transform_draw(layer);

@@ -83,7 +83,7 @@
 ** TODO Need to "reflow" (aka assign new ranks) when an event is deleted
 ** TODO Two instantaneous events at slightly different times will overlap in the Timeline UI
 ** DONE When transform events are deleted/changed, need to update descendants of layer as well as just the layer itself
-** TODO Need to add nesting-awareness to post_transform_draw
+** DONE Need to add nesting-awareness to post_transform_draw
 ** DONE Recording transformations in a child when the parent(s) have transforms is broken
 *** Need to take the desired transform and transform it through the inverse of the ancestors' transforms to get the actual transform to apply.
 * Improvements
