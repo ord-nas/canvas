@@ -84,6 +84,8 @@
 ** TODO Two instantaneous events at slightly different times will overlap in the Timeline UI
 ** TODO When transform events are deleted/changed, need to update descendants of layer as well as just the layer itself
 ** TODO Need to add nesting-awareness to post_transform_draw
+** DONE Recording transformations in a child when the parent(s) have transforms is broken
+*** Need to take the desired transform and transform it through the inverse of the ancestors' transforms to get the actual transform to apply.
 * Improvements
 ** DONE Improve drag handling
 *** Make global mouseup and mousemove events, attached to body

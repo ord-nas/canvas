@@ -127,20 +127,20 @@
 		 resetTransform: function() {
 		     this.setMatrix(getIdentityMatrix());
 		 },
-		 getInverse: function() {
-		     var inv = getIdentityMatrix();
-		     var m = this._matrix;
-		     inv.a = m.d / (m.a*m.d - m.b*m.c);
-		     inv.c = -m.c / (m.a*m.d - m.b*m.c);
-		     inv.e = (m.c*m.f - m.d*m.e) / (m.a*m.d - m.b*m.c);
-		     inv.b = -m.b / (m.a*m.d - m.b*m.c);
-		     inv.d = m.a / (m.a*m.d - m.b*m.c);
-		     inv.f = (m.b*m.e - m.a*m.f) / (m.a*m.d - m.b*m.c);
-		     return inv;
-		 },
 		 __proto__: prior_proto,
 	     };
 	 }
+
+	 function invert(m) {
+	     var inv = getIdentityMatrix();
+	     inv.a = m.d / (m.a*m.d - m.b*m.c);
+	     inv.c = -m.c / (m.a*m.d - m.b*m.c);
+	     inv.e = (m.c*m.f - m.d*m.e) / (m.a*m.d - m.b*m.c);
+	     inv.b = -m.b / (m.a*m.d - m.b*m.c);
+	     inv.d = m.a / (m.a*m.d - m.b*m.c);
+	     inv.f = (m.b*m.e - m.a*m.f) / (m.a*m.d - m.b*m.c);
+	     return inv;
+	 };
 
 	 function fake_event_like(event, start, end) {
 	     var e = Object.create(event);
@@ -898,17 +898,35 @@
 	     var svg_pnt = getSVGElement().createSVGPoint();
 	     svg_pnt.x = pnt.x;
 	     svg_pnt.y = pnt.y;
-	     // TODO: It's annoying that we have to do this ...
+	     // TODO: It's annoying (and really bad) that we have to do this ...
 	     var old_m = layer.ctx._matrix;
+	     var old_matrices = layer.matrices.slice(); // Copy
 	     var now = {
 		 time: current_project_time,
 		 seq_id: current_seq_id,
 	     };
 	     transformPeriod(layer.last_transform, now, layer);
-	     svg_pnt = svg_pnt.matrixTransform(layer.ctx.getInverse());
+	     svg_pnt = svg_pnt.matrixTransform(invert(layer.ctx._matrix));
 	     layer.ctx.setMatrix(old_m);
+	     layer.matrices = old_matrices;
 	     // END ANNOYING
 	     return svg_pnt;
+	 }
+
+	 function findTransformMatrix(layer) {
+	     // TODO: It's annoying (and really bad) that we have to do this ...
+	     var old_m = layer.ctx._matrix;
+	     var old_matrices = layer.matrices.slice(); // Copy
+	     var now = {
+		 time: current_project_time,
+		 seq_id: current_seq_id,
+	     };
+	     transformPeriod(layer.last_transform, now, layer);
+	     var retval = layer.ctx._matrix;
+	     layer.ctx.setMatrix(old_m);
+	     layer.matrices = old_matrices;
+	     // END ANNOYING
+	     return retval;
 	 }
 
 	 function clear(ctx) {
@@ -1327,11 +1345,18 @@
 		 var bucket = Math.floor(project_time / bucket_size);
 		 this.last_point = this.current_point;
 		 this.current_point = pnt;
+		 // Here's where we compute what the transform should be
+		 var base_transform = this.matrix_fun(this.guide_point,
+						      this.initial_point,
+						      this.last_point,
+						      this.current_point);
+		 // We need to invert "through" the transform matrices of our ancestors.
+		 var ancestor_transform = (this.active_layer.parent === null ?
+					   getIdentityMatrix() :
+					   findTransformMatrix(this.active_layer.parent));
+		 var actual_transform = invert(ancestor_transform).multiply(base_transform).multiply(ancestor_transform);
 		 var delta = {
-		     m: this.matrix_fun(this.guide_point,
-					this.initial_point,
-					this.last_point,
-					this.current_point),
+		     m: actual_transform,
 		     time: project_time - this.active_transform.start,
 		     seq_id: current_seq_id++,
 		 };
