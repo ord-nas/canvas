@@ -829,11 +829,11 @@
 		 if (e instanceof Stroke) {
 		     remove_event_impl(e, e.layer.stroke_buckets, e.layer.strokes);
 		     e.layer.last_draw = null;
-		     // TODO: need to reset last transform of descendants too!
 		 } else if (e instanceof Transform) {
 		     remove_event_impl(e, e.layer.transform_buckets, e.layer.transforms);
-		     e.layer.last_transform = null;
-		     // TODO: need to reset last transform of descendants too!
+		     for (var layer of get_layer_descendants(e.layer)) {
+			 layer.last_transform = null;
+		     }
 		 } else {
 		     console.log("ERROR: Trying to remove unrecognized event type");
 		     return;
@@ -863,11 +863,11 @@
 		 if (e instanceof Stroke) {
 		     add_event_impl(e, e.layer.stroke_buckets, e.layer.strokes);
 		     e.layer.last_draw = null;
-		     // TODO: need to reset last transform of descendants too!
 		 } else if (e instanceof Transform) {
 		     add_event_impl(e, e.layer.transform_buckets, e.layer.transforms);
-		     e.layer.last_transform = null;
-		     // TODO: need to reset last transform of descendants too!
+		     for (var layer of get_layer_descendants(e.layer)) {
+			 layer.last_transform = null;
+		     }
 		 } else {
 		     console.log("ERROR: Trying to add unrecognized event type");
 		     return;
@@ -1064,8 +1064,7 @@
 
 	 function standard_draw(layer) {
 	     // Check if our layer ancestors have changed since last draw
-	     var new_ancestors = [];
-	     get_layer_ancestors(layer, new_ancestors);
+	     var new_ancestors = get_layer_ancestors(layer);
 	     if (!shallow_array_equals(new_ancestors, layer.ancestors)) {
 		 console.log("LAYER ANCESTORS CHANGED: " + layer.title);
 		 layer.last_transform = null;
@@ -1776,18 +1775,30 @@
 	     update_layers();
 	 }
 
-	 function get_layer_descendants(layer, descendants) {
-	     descendants.add(layer.id);
+	 function get_layer_descendants_helper(layer, descendants) {
+	     descendants.push(layer);
 	     for (var child of layer.children) {
-		 get_layer_descendants(child, descendants);
+		 get_layer_descendants_helper(child, descendants);
 	     }
 	 }
 
-	 function get_layer_ancestors(layer, ancestors) {
+	 function get_layer_descendants(layer) {
+	     var descendants = [];
+	     get_layer_descendants_helper(layer, descendants);
+	     return descendants;
+	 }
+
+	 function get_layer_ancestors_helper(layer, ancestors) {
 	     ancestors.push(layer);
 	     if (layer.parent !== null) {
-		 get_layer_ancestors(layer.parent, ancestors);
+		 get_layer_ancestors_helper(layer.parent, ancestors);
 	     }
+	 }
+
+	 function get_layer_ancestors(layer) {
+	     var ancestors = [];
+	     get_layer_ancestors_helper(layer, ancestors);
+	     return ancestors;
 	 }
 
 	 function shallow_array_equals(a1, a2) {
@@ -1795,10 +1806,9 @@
 	 }
 
 	 function delete_layer(layer) {
-	     var targets = new Set();
-	     get_layer_descendants(layer, targets);
+	     var targets = new Set(get_layer_descendants(layer));
 	     for (i = 0; i < layers.length;) {
-		 if (targets.has(layers[i].id)) {
+		 if (targets.has(layers[i])) {
 		     layers[i].delete();
 		     layers.splice(i, 1);
 		 } else {
