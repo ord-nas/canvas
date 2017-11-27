@@ -93,3 +93,5 @@
 *** Global mouseup and mousemove events delegate to the current handlers
 *** This allows you to start a drag inside a canvas (or other element) and continue outside it
 *** Also catch when the mouse leaves the entire body, and count that as mouseup
+** TODO Make it so that any action on a layer selects it.
+** TODO Make layer background change colour when selected.
