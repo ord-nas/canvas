@@ -28,7 +28,7 @@
 *** DONE Renamed
 *** DONE Reordered
 *** DONE Selected
-** TODO Layer grouping and nesting?
+** DONE Layer grouping and nesting?
 *** Active library: https://github.com/ilikenwf/nestedSortable
 **** Demo: http://ilikenwf.github.io/example.html
 *** Deprecated library: https://github.com/mjsarfatti/nestedSortable
@@ -44,6 +44,7 @@
 ** TODO Polygon?
 ** TODO Paintbucket
 ** TODO Allow brush shape to be transformed?
+** TODO Scale/reflect across arbitrary axix
 * Timeline view
 ** DONE Figure out HOW!
 *** Synchronized scrollbar reference: http://jsfiddle.net/kunknown/VVaEq/2/
@@ -95,3 +96,9 @@
 *** Also catch when the mouse leaves the entire body, and count that as mouseup
 ** TODO Make it so that any action on a layer selects it.
 ** TODO Make layer background change colour when selected.
+** TODO Refactor buckets so that the the interface is more "automatic"
+* New Features
+** TODO Images - layer background
+** TODO Show/hide actions
+** TODO Toggle sublayer animation feature
+** TODO Viewport - temporary viewpoint transformation that doesn't affect timeline
