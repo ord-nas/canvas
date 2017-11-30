@@ -254,7 +254,7 @@
 
 	     // All events in view
 	     var all_in_view = this.events_in_view();
-	     // Convert to array, filter to just visbility events, and sort.
+	     // Convert to array, filter to just visibility events, and sort.
 	     var in_view = Array.from(all_in_view);
 	     in_view = in_view.filter(function(e) { return (e instanceof VisibilityEvent); });
 	     in_view = in_view.sort(compare_events);
@@ -814,12 +814,14 @@
 	     this.ctx = this.canvas.getContext("2d");
 	     addMatrixTrackingToContext(this.ctx);
 	     this.matrices = [getIdentityMatrix()];
+	     this.visibilities = [true];
 	     this.ancestors = [this];
 
 	     this.timeline = new Timeline(this);
 
 	     this.last_draw = null;
 	     this.last_transform = null;
+	     this.last_visibility_check = null;
 	     this.redraw_on_transform_change = true;
 	     this.temp_canvas = null;
 
@@ -838,6 +840,16 @@
 		 this.matrices[i] = getIdentityMatrix();
 	     }
 	     this.ctx.resetTransform();
+	 }
+
+	 Layer.prototype.resetVisibility = function() {
+	     for (var i = 0; i < this.visibilities.length; ++i) {
+		 this.visibilities[i] = true;
+	     }
+	 }
+
+	 Layer.prototype.is_visible = function() {
+	     return this.visibilities.every(x => x);
 	 }
 
 	 Layer.prototype.clear_temp_canvas = function() {
@@ -911,7 +923,7 @@
 		 } else if (e instanceof VisibilityEvent) {
 		     remove_event_impl(e, e.layer.visibility_buckets, e.layer.visibility_events);
 		     for (var layer of get_layer_descendants(e.layer)) {
-			 // FIXME
+			 layer.last_visibility_check = null;
 		     }
 		 } else {
 		     console.log("ERROR: Trying to remove unrecognized event type");
@@ -950,7 +962,7 @@
 		 } else if (e instanceof VisibilityEvent) {
 		     add_event_impl(e, e.layer.visibility_buckets, e.layer.visibility_events);
 		     for (var layer of get_layer_descendants(e.layer)) {
-			 // FIXME
+			 layer.last_visibility_check = null;
 		     }
 		 } else {
 		     console.log("ERROR: Trying to add unrecognized event type");
@@ -1068,6 +1080,21 @@
 	     return performed_action;
 	 }
 
+	 function updateVisibilityForPeriod(start, end, layer, visibilities) {
+	     if (visibilities === undefined) {
+		 visibilities = layer.visibilities;
+	     }
+	     var current_layer = layer;
+	     var performed_action = false;
+	     for (var i = 0; i < visibilities.length; ++i) {
+		 var args = ["", visibilities[i]];
+		 performed_action = evalPeriod(start, end, current_layer.visibility_buckets, args) || performed_action;
+		 visibilities[i] = args[1];
+		 current_layer = current_layer.parent;
+	     }
+	     return performed_action;
+	 }
+
 	 function drawPeriod(start, end, layer, ctx) {
 	     if (ctx === undefined) {
 		 ctx = layer.ctx;
@@ -1131,25 +1158,47 @@
 	     window.requestAnimationFrame(tick);
 	 }
 
+	 function update_layer_ancestors(layer) {
+	     var new_ancestors = get_layer_ancestors(layer);
+	     if (!shallow_array_equals(new_ancestors, layer.ancestors)) {
+		 console.log("LAYER ANCESTORS CHANGED: " + layer.title);
+		 layer.last_transform = null;
+		 layer.last_visibility_check = null;
+		 layer.ancestors = new_ancestors;
+		 layer.matrices = [];
+		 layer.visibilities = [];
+		 for (var i = 0; i < new_ancestors.length; ++i) {
+		     layer.matrices.push(getIdentityMatrix());
+		     layer.visibilities.push(true);
+		 }
+	     }
+	 }
+
 	 var always_clear = false;
 	 var always_reset_transform = false;
 
 	 function standard_draw(layer) {
 	     // Check if our layer ancestors have changed since last draw
-	     var new_ancestors = get_layer_ancestors(layer);
-	     if (!shallow_array_equals(new_ancestors, layer.ancestors)) {
-		 console.log("LAYER ANCESTORS CHANGED: " + layer.title);
-		 layer.last_transform = null;
-		 layer.ancestors = new_ancestors;
-		 layer.matrices = [];
-		 for (var i = 0; i < new_ancestors.length; ++i) {
-		     layer.matrices.push(getIdentityMatrix());
-		 }
-	     }
+	     update_layer_ancestors(layer);
 	     var now = {
 		 time: current_project_time,
 		 seq_id: current_seq_id,
 	     };
+	     if (layer.last_visibility_check === null ||
+		 compare_events(now, layer.last_visibility_check) < 0) {
+		 console.log("RESET VISIBILITY (STANDARD)");
+		 layer.resetVisibility();
+		 updateVisibilityForPeriod(0, now, layer);
+	     } else {
+		 updateVisibilityForPeriod(layer.last_visibility_check, now, layer);
+	     }
+	     layer.last_visibility_check = now;
+	     if (!layer.is_visible()) {
+		 // We are going to break out early!
+		 $(layer.canvas).css("visibility", "hidden");
+		 return;
+	     }
+	     $(layer.canvas).css("visibility", "visible");
 	     var transform_changed = false;
 	     if (always_reset_transform ||
 		 layer.last_transform === null ||
@@ -1180,22 +1229,28 @@
 
 	 function post_transform_draw(layer) {
 	     // Check if our layer ancestors have changed since last draw
-	     var new_ancestors = get_layer_ancestors(layer);
-	     if (!shallow_array_equals(new_ancestors, layer.ancestors)) {
-		 console.log("LAYER ANCESTORS CHANGED: " + layer.title);
-		 layer.last_transform = null;
-		 layer.ancestors = new_ancestors;
-		 layer.matrices = [];
-		 for (var i = 0; i < new_ancestors.length; ++i) {
-		     layer.matrices.push(getIdentityMatrix());
-		 }
-	     }
-	     var temp_canvas = layer.get_temp_canvas();
-	     var temp_ctx = temp_canvas.getContext("2d");
+	     update_layer_ancestors(layer);
 	     var now = {
 		 time: current_project_time,
 		 seq_id: current_seq_id,
 	     };
+	     if (layer.last_visibility_check === null ||
+		 compare_events(now, layer.last_visibility_check) < 0) {
+		 console.log("RESET VISIBILITY (STANDARD)");
+		 layer.resetVisibility();
+		 updateVisibilityForPeriod(0, now, layer);
+	     } else {
+		 updateVisibilityForPeriod(layer.last_visibility_check, now, layer);
+	     }
+	     layer.last_visibility_check = now;
+	     if (!layer.is_visible()) {
+		 // We are going to break out early!
+		 $(layer.canvas).css("visibility", "hidden");
+		 return;
+	     }
+	     $(layer.canvas).css("visibility", "visible");
+	     var temp_canvas = layer.get_temp_canvas();
+	     var temp_ctx = temp_canvas.getContext("2d");
 	     if (layer.last_draw === null || compare_events(now, layer.last_draw) < 0 ||
 		 layer.last_transform === null || compare_events(now, layer.last_transform) < 0) {
 		 console.log("RESET TRANSFORM & DRAW (POST)");
