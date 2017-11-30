@@ -203,7 +203,9 @@
 	     var start_bucket = Math.floor(start / bucket_size);
 	     var end_bucket = Math.floor(end / bucket_size);
 	     for (var index = start_bucket; index <= end_bucket; ++index) {
-		 for (var buckets of [this.layer.stroke_buckets, this.layer.transform_buckets]) {
+		 for (var buckets of [this.layer.stroke_buckets,
+				      this.layer.transform_buckets,
+				      this.layer.visibility_buckets]) {
 		     if (!(index in buckets)) {
 			 continue;
 		     }
@@ -222,6 +224,59 @@
 
 	 Timeline.prototype.events_in_view = function() {
 	     return this.events_in_time_range(Timeline.start, Timeline.end);
+	 }
+
+	 Timeline.prototype.get_hidden_sections = function() {
+	     var start_bucket = Math.floor(Timeline.start / bucket_size);
+	     var end_bucket = Math.floor(Timeline.end / bucket_size);
+
+	     // First find the state before
+	     var visible_before = true; // default if we can't find any events
+	     var index = start_bucket;
+	     while (index > 0) {
+		 if (index in this.layer.visibility_buckets) {
+		     var latest_event = null;
+		     for (var event of this.layer.visibility_buckets[index]) {
+			 if (event.time > Timeline.start) {
+			     continue;
+			 }
+			 if (latest_event === null || compare_events(event, latest_event) == 1) {
+			     latest_event = event;
+			 }
+		     }
+		     if (latest_event !== null) {
+			 visible_before = latest_event.is_visible();
+			 break;
+		     }
+		 }
+		 index--;
+	     }
+
+	     // All events in view
+	     var all_in_view = this.events_in_view();
+	     // Convert to array, filter to just visbility events, and sort.
+	     var in_view = Array.from(all_in_view);
+	     in_view = in_view.filter(function(e) { return (e instanceof VisibilityEvent); });
+	     in_view = in_view.sort(compare_events);
+
+	     // Now compute which segments we're hidden for
+	     var hidden_segments = [];
+	     var begin_hidden = (visible_before ? null : Timeline.start);
+	     for (var event of in_view) {
+		 var visible = event.is_visible();
+		 if (!visible && begin_hidden === null) {
+		     begin_hidden = event.time;
+		 }
+		 if (visible && begin_hidden !== null) {
+		     hidden_segments.push([begin_hidden, event.time]);
+		     begin_hidden = null;
+		 }
+	     }
+	     if (begin_hidden !== null) {
+		 hidden_segments.push([begin_hidden, Timeline.end]);
+	     }
+
+	     return hidden_segments;
 	 }
 
 	 Timeline.prototype.get_rect = function(event) {
@@ -252,8 +307,10 @@
 		 return 'red';
 	     } else if (event instanceof Stroke) {
 		 return 'blue';
-	     } else {
+	     } else if (event instanceof Transform) {
 		 return 'orange';
+	     } else {
+		 return 'green';
 	     }
 	 }
 
@@ -268,6 +325,18 @@
 	     this.ctx.rect(0, 0, this.canvas.width, this.canvas.height);
 	     this.ctx.closePath();
 	     this.ctx.fill();
+
+	     // Draw visibility information
+	     var hidden_segments = this.get_hidden_sections();
+	     for (var segment of hidden_segments) {
+		 var x_begin = (segment[0] - Timeline.start) / (Timeline.end - Timeline.start) * this.canvas.width;
+		 var x_end = (segment[1] - Timeline.start) / (Timeline.end - Timeline.start) * this.canvas.width;
+		 this.ctx.fillStyle = 'LightGreen';
+		 this.ctx.beginPath();
+		 this.ctx.rect(x_begin, 0, x_end - x_begin, this.canvas.height);
+		 this.ctx.closePath();
+		 this.ctx.fill();
+	     }
 
 	     // Draw the windows selection preview
 	     if (this.window_preview_start !== null) {
@@ -459,6 +528,8 @@
 		     arr = e.pnts;
 		 } else if (e instanceof Transform) {
 		     arr = e.deltas;
+		 } else if (e instanceof VisibilityEvent) {
+		     arr = []; // Nothing to scale!
 		 } else {
 		     console.log("ERROR: Tried to scale, but got event in selection of unknown type");
 		     return;
@@ -724,7 +795,8 @@
 		 return acc;
 	     };
 	     this.max_rank = Math.max(this.layer.strokes.reduce(accumulate_max_rank, 0),
-				      this.layer.transforms.reduce(accumulate_max_rank, 0));
+				      this.layer.transforms.reduce(accumulate_max_rank, 0),
+	     			      this.layer.visibility_events.reduce(accumulate_max_rank, 0));
 	 }
 
 	 // END TIMELINE DEFINITION
@@ -755,6 +827,8 @@
 	     this.strokes = [];
 	     this.transform_buckets = {};
 	     this.transforms = [];
+	     this.visibility_buckets = {};
+	     this.visibility_events = [];
 
 	     this.parent = null;
 	 }
@@ -834,6 +908,11 @@
 		     for (var layer of get_layer_descendants(e.layer)) {
 			 layer.last_transform = null;
 		     }
+		 } else if (e instanceof VisibilityEvent) {
+		     remove_event_impl(e, e.layer.visibility_buckets, e.layer.visibility_events);
+		     for (var layer of get_layer_descendants(e.layer)) {
+			 // FIXME
+		     }
 		 } else {
 		     console.log("ERROR: Trying to remove unrecognized event type");
 		     return;
@@ -867,6 +946,11 @@
 		     add_event_impl(e, e.layer.transform_buckets, e.layer.transforms);
 		     for (var layer of get_layer_descendants(e.layer)) {
 			 layer.last_transform = null;
+		     }
+		 } else if (e instanceof VisibilityEvent) {
+		     add_event_impl(e, e.layer.visibility_buckets, e.layer.visibility_events);
+		     for (var layer of get_layer_descendants(e.layer)) {
+			 // FIXME
 		     }
 		 } else {
 		     console.log("ERROR: Trying to add unrecognized event type");
@@ -1281,6 +1365,70 @@
 	     return cpy;
 	 }
 
+	 // VISIBILITY
+
+	 // action is either: true for show this layer (and all sublayers)
+	 //                   false for hide this layer (and all sublayers)
+	 //                   identifier for show this layer and show sublayer with matching identifier and hide all other sublayers
+	 function VisibilityEvent(action, time, seq_id, layer) {
+	     this.action = action;
+	     this.start = time;
+
+	     // Define time as an alias for start
+	     Object.defineProperty(this, "time", {
+		 enumerable: true,
+		 configurable: true,
+		 get(){
+		     return this.start;
+		 },
+		 set(value){
+		     this.start = value;
+		 }
+	     });
+
+	     this.time = time;
+	     this.seq_id = seq_id;
+	     this.layer = layer;
+	 }
+
+	 VisibilityEvent.prototype.is_visible = function(target = "") {
+	     if (this.action === true) {
+		 return true;
+	     } else if (this.action === false) {
+		 return false;
+	     } else if (target === "" || target === this.action) {
+		 return true;
+	     } else {
+		 return false;
+	     }
+	 }
+
+	 // Two args:
+	 //    args[0] is the target whose visibility we are querying. Will be "" for this layer, and something else for sublayers
+	 //    args[1] is where the output should be placed. Should be true for visible, false otherwise
+	 VisibilityEvent.prototype.eval = function(args) {
+	     var target = args[0];
+	     args[1] = this.is_visible(target);
+	 }
+
+	 VisibilityEvent.prototype.push_events_into = function(arr) {
+	     arr.push(this);
+	 }
+
+	 VisibilityEvent.prototype.begin = function() {
+	     return this.start;
+	 }
+
+	 VisibilityEvent.prototype.end = function() {
+	     return this.start;
+	 }
+
+	 VisibilityEvent.prototype.shallow_copy = function() {
+	     var cpy = Object.create(this.__proto__);
+	     Object.assign(cpy, this);
+	     return cpy;
+	 }
+
 	 // TRANSFORM ACTION
 
 	 function TransformAction(matrix_fun, uses_guide_point, point_filter) {
@@ -1564,6 +1712,25 @@
 	     {key: "rotate_and_scale", title: "Rotation and Scale", tool: new TransformAction(rotate_and_scale, true, rotate_and_scale_filter)},
 	 ];
 	 var current_action = null;
+
+	 // Hide/show handlers
+	 function add_visibility_event(layer, action) {
+	     if (layer === null) {
+		 return;
+	     }
+
+	     // Make the event
+	     var event = new VisibilityEvent(action, current_project_time, current_seq_id++, layer);
+
+	     // Add it to the layer
+	     var bucket = Math.floor(current_project_time / bucket_size);
+	     layer.visibility_events.push(event);
+	     addToBucket(layer.visibility_buckets, bucket, event);
+
+	     // Give the event a rank in the timeline & tell timeline to update itself
+	     layer.timeline.assign_rank(event);
+	     layer.timeline.needs_redraw = true;
+	 }
 
 	 var layers = [];
 	 var next_layer_key = 1;
@@ -1920,12 +2087,20 @@
 	     $("#go").on("click", go);
 	     $("#new_layer").on("click", new_layer);
 
-	     // TODO: this is dumb, and also triggers on text edits ...
+	     // Keystrokes
 	     $("body").on("keydown", function(e) {
 		 if (e.key == "Delete") {
 		     remove_events(selection);
 		     selection = [];
+		 } else if (e.key == "s") {
+		     add_visibility_event(current_layer, true);
+		 } else if (e.key == "h") {
+		     add_visibility_event(current_layer, false);
 		 }
+	     });
+	     // Don't capture keystrokes when in text fields.
+	     $("input:text").on("keydown", function(e) {
+		 e.stopPropagation();
 	     });
 
 	     var i;
