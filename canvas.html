@@ -982,19 +982,7 @@
 	     var svg_pnt = getSVGElement().createSVGPoint();
 	     svg_pnt.x = pnt.x;
 	     svg_pnt.y = pnt.y;
-	     // TODO: It's annoying (and really bad) that we have to do this ...
-	     var old_m = layer.ctx._matrix;
-	     var old_matrices = layer.matrices.slice(); // Copy
-	     var now = {
-		 time: current_project_time,
-		 seq_id: current_seq_id,
-	     };
-	     transformPeriod(layer.last_transform, now, layer);
-	     svg_pnt = svg_pnt.matrixTransform(invert(layer.ctx._matrix));
-	     layer.ctx.setMatrix(old_m);
-	     layer.matrices = old_matrices;
-	     // END ANNOYING
-	     return svg_pnt;
+	     return svg_pnt.matrixTransform(invert(findTransformMatrix(layer)));
 	 }
 
 	 function findTransformMatrix(layer) {
