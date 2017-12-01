@@ -99,6 +99,6 @@
 ** TODO Refactor buckets so that the the interface is more "automatic"
 * New Features
 ** TODO Images - layer background
-** TODO Show/hide actions
-** TODO Toggle sublayer animation feature
+** DONE Show/hide actions
+** DONE Toggle sublayer animation feature
 ** TODO Viewport - temporary viewpoint transformation that doesn't affect timeline
