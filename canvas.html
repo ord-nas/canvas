@@ -815,6 +815,7 @@
 	     addMatrixTrackingToContext(this.ctx);
 	     this.matrices = [getIdentityMatrix()];
 	     this.visibilities = [true];
+	     this.child_index = null;
 	     this.ancestors = [this];
 
 	     this.timeline = new Timeline(this);
@@ -1086,10 +1087,12 @@
 	     }
 	     var current_layer = layer;
 	     var performed_action = false;
+	     var child_index = null;
 	     for (var i = 0; i < visibilities.length; ++i) {
-		 var args = ["", visibilities[i]];
+		 var args = [child_index, visibilities[i]];
 		 performed_action = evalPeriod(start, end, current_layer.visibility_buckets, args) || performed_action;
 		 visibilities[i] = args[1];
+		 child_index = current_layer.child_index;
 		 current_layer = current_layer.parent;
 	     }
 	     return performed_action;
@@ -1160,15 +1163,29 @@
 
 	 function update_layer_ancestors(layer) {
 	     var new_ancestors = get_layer_ancestors(layer);
+	     var new_child_index = (layer.parent === null ?
+				    null :
+				    layer.parent.children.findIndex(function(child) {
+					return child === layer;
+				    }));
 	     if (!shallow_array_equals(new_ancestors, layer.ancestors)) {
 		 console.log("LAYER ANCESTORS CHANGED: " + layer.title);
 		 layer.last_transform = null;
 		 layer.last_visibility_check = null;
 		 layer.ancestors = new_ancestors;
+		 layer.child_index = new_child_index;
 		 layer.matrices = [];
 		 layer.visibilities = [];
 		 for (var i = 0; i < new_ancestors.length; ++i) {
 		     layer.matrices.push(getIdentityMatrix());
+		     layer.visibilities.push(true);
+		 }
+	     } else if (new_child_index !== layer.child_index) {
+		 console.log("LAYER CHILD INDEX CHANGED: " + layer.title);
+		 layer.last_visibility_check = null;
+		 layer.child_index = new_child_index;
+		 layer.visibilities = [];
+		 for (var i = 0; i < new_ancestors.length; ++i) {
 		     layer.visibilities.push(true);
 		 }
 	     }
@@ -1434,12 +1451,12 @@
 	     this.layer = layer;
 	 }
 
-	 VisibilityEvent.prototype.is_visible = function(target = "") {
+	 VisibilityEvent.prototype.is_visible = function(target = null) {
 	     if (this.action === true) {
 		 return true;
 	     } else if (this.action === false) {
 		 return false;
-	     } else if (target === "" || target === this.action) {
+	     } else if (target === null || target === this.action) {
 		 return true;
 	     } else {
 		 return false;
@@ -1447,7 +1464,7 @@
 	 }
 
 	 // Two args:
-	 //    args[0] is the target whose visibility we are querying. Will be "" for this layer, and something else for sublayers
+	 //    args[0] is the target whose visibility we are querying. Will be null for this layer, and something else for sublayers
 	 //    args[1] is where the output should be placed. Should be true for visible, false otherwise
 	 VisibilityEvent.prototype.eval = function(args) {
 	     var target = args[0];
@@ -2139,6 +2156,9 @@
 		     add_visibility_event(current_layer, true);
 		 } else if (e.key == "h") {
 		     add_visibility_event(current_layer, false);
+		 } else if (!isNaN(parseInt(e.key))) {
+		     var num = (parseInt(e.key) + 9) % 10;
+		     add_visibility_event(current_layer, num);
 		 }
 	     });
 	     // Don't capture keystrokes when in text fields.
