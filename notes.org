@@ -98,7 +98,7 @@
 ** TODO Make layer background change colour when selected.
 ** TODO Refactor buckets so that the the interface is more "automatic"
 * New Features
-** TODO Images - layer background
+** DONE Images - layer background
 ** DONE Show/hide actions
 ** DONE Toggle sublayer animation feature
 ** TODO Viewport - temporary viewpoint transformation that doesn't affect timeline
