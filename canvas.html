@@ -2361,6 +2361,13 @@
 	    </form>
 	</div>
 
+	<p>Layers
+	    <button type="button" id="new_layer">New</button>
+	    <button type="button" id="new_image">New Image</button>
+	</p>
+
+	<ol id="layer_selector" class="sortable ui-sortable mjs-nestedSortable-branch mjs-nestedSortable-expanded"></ol>
+
 	<p>Time:
 	    <input type="text" id="time"/>
 	    <button type="button" id="go">Go</button>
@@ -2372,12 +2379,7 @@
 	    Stroke colour: <input type="color" id="stroke_colour" value="#ff0000" style="width:200px;">
 	    Stroke width: <span id="stroke_width" style="display:inline-block;width:200px;margin-left:15px"></span>
 	</p>
-	<p>Layers
-	    <button type="button" id="new_layer">New</button>
-	    <button type="button" id="new_image">New Image</button>
-	</p>
-	<ol id="layer_selector" class="sortable ui-sortable mjs-nestedSortable-branch mjs-nestedSortable-expanded"></ol>
-	<br>
+
 	<div id="layer_set" style="position:relative">
 	    <canvas id="background" height="720px" width="1280px" style="z-index:0;position:absolute;left:0px;top:0px">
 		Browser doesn't support canvas! Oops!
