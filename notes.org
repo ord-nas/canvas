@@ -33,6 +33,8 @@
 **** Demo: http://ilikenwf.github.io/example.html
 *** Deprecated library: https://github.com/mjsarfatti/nestedSortable
 **** Demo: http://mjsarfatti.com/sandbox/nestedSortable/
+*** TODO Add layer collapsing ?
+** TODO Limit the total space the layers can occupy
 * New tools
 ** TODO Eraser
 ** Line
@@ -45,9 +47,22 @@
 ** TODO Paintbucket
 ** TODO Allow brush shape to be transformed?
 ** TODO Scale/reflect across arbitrary axix
+** TODO Smooth transforms
+*** Trace out a regular transform, like normal, from mousedown to mouseup
+*** Instead of playing back at recorded speed, playback uniformly between start time and end time
 * Timeline view
 ** DONE Figure out HOW!
 *** Synchronized scrollbar reference: http://jsfiddle.net/kunknown/VVaEq/2/
+** TODO Add time markings
+** TODO Figure out how to handle vertical scrolling
+** Editing tools
+*** TODO Copy/paste
+*** TODO Duplicate?
+*** TODO Split event
+*** TODO Evenly space out events
+*** TODO Reverse event
+*** TODO Move event from one timeline to another
+*** TODO Move selected events to start/end at current time
 * Performance
 ** TODO Profile the drawing function (especially when it needs to redraw every frame)
 ** TODO Switch to using redraw_on_transform_change = false more often
@@ -97,8 +112,15 @@
 ** TODO Make it so that any action on a layer selects it.
 ** TODO Make layer background change colour when selected.
 ** TODO Refactor buckets so that the the interface is more "automatic"
+** TODO Make it so that when previewing a timeline move or scale, we hide the original events so you can actually see the preview better.
 * New Features
 ** DONE Images - layer background
 ** DONE Show/hide actions
 ** DONE Toggle sublayer animation feature
 ** TODO Viewport - temporary viewpoint transformation that doesn't affect timeline
+** TODO Global undo/redo
+** TODO Select stroke by clicking
+** TODO Add some notion of "clears"
+*** Probably global? Not layer-specific?
+* Sound Recording
+** TODO Figure out HOW
