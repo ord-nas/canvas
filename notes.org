@@ -57,7 +57,9 @@
 ** TODO Figure out how to handle vertical scrolling
 ** Editing tools
 *** TODO Copy/paste
-*** TODO Duplicate?
+*** Duplicate?
+**** DONE Within layer
+**** TODO Between layers
 *** TODO Split event
 *** TODO Evenly space out events
 *** TODO Reverse event

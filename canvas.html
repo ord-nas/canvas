@@ -195,6 +195,7 @@
 	 Timeline.min_time = 100; // ms
 	 Timeline.cursor_width = 1;
 	 Timeline.move_preview_delta = null;
+	 Timeline.duplicate_preview_delta = null;
 	 Timeline.scale_preview_factor = null;
 	 Timeline.scale_preview_anchor = null;
 	 Timeline.scale_preview_stretch = null;
@@ -373,13 +374,16 @@
 	     }
 
 	     // Draw the move preview
-	     if (Timeline.move_preview_delta !== null) {
+	     if (Timeline.move_preview_delta !== null ||
+		 Timeline.duplicate_preview_delta !== null) {
+		 var delta = Timeline.move_preview_delta ||
+			     Timeline.duplicate_preview_delta;
 		 for (var event of selection) {
 		     if (event.layer != this.layer) {
 			 continue;
 		     }
 		     var moved_event = event.shallow_copy();
-		     moved_event.start += Timeline.move_preview_delta;
+		     moved_event.start += delta;
 		     var [x1, y1, width, height] = this.get_rect(moved_event);
 
 		     this.ctx.beginPath();
@@ -488,7 +492,7 @@
 	     return null;
 	 }
 
-	 function timeline_move_preview(evnt, move_action) {
+	 function timeline_move_duplicate_preview(evnt, move_action) {
 	     var pos = getMousePos(evnt, move_action.timeline.canvas);
 	     var initial_pos = getMousePos(move_action.mousedown_evnt, move_action.timeline.canvas);
 	     if (pos != initial_pos) {
@@ -499,7 +503,11 @@
 		 // so all Timelines know they need to show a move preview.
 		 var current_time = pos.x / move_action.timeline.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
 		 var initial_time = initial_pos.x / move_action.timeline.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
-		 Timeline.move_preview_delta = current_time - initial_time;
+		 if (move_action.mousedown_evnt.shiftKey) {
+		     Timeline.duplicate_preview_delta = current_time - initial_time;
+		 } else {
+		     Timeline.move_preview_delta = current_time - initial_time;
+		 }
 		 // Invalidate all timelines that have events in the selection, so that they will
 		 // redraw and show the move preview.
 		 for (var s of selection) {
@@ -508,25 +516,34 @@
 	     }
 	 }
 
-	 function timeline_move() {
+	 function timeline_move_duplicate() {
 	     // Check that none of the movements result in a start time < 0, and if so bail
 	     var can_do_move = true;
+	     var delta = Timeline.move_preview_delta ||
+			 Timeline.duplicate_preview_delta;
 	     for (var e of selection) {
-		 if (e.start + Timeline.move_preview_delta < 0) {
+		 if (e.start + delta < 0) {
 		     can_do_move = false;
 		 }
 		 // Regardless of whether or not the move succeeds, we need to redraw
 		 // every timeline in the selection.
 		 e.layer.timeline.needs_redraw = true;
 	     }
-	     if (can_do_move) {
+	     if (can_do_move && Timeline.move_preview_delta !== null) {
 		 remove_events(selection);
 		 for (var e of selection) {
-		     e.start += Timeline.move_preview_delta;
+		     e.start += delta;
 		 }
 		 add_events(selection);
+	     } else if (can_do_move && Timeline.duplicate_preview_delta !== null) {
+		 add_events(selection.map(function(event) {
+		     var duplicate = event.clone();
+		     duplicate.start += delta;
+		     return duplicate;
+		 }));
 	     }
 	     Timeline.move_preview_delta = null;
+	     Timeline.duplicate_preview_delta = null;
 	 }
 
 	 function timeline_scale() {
@@ -560,11 +577,11 @@
 	     this.mouse_moved = false;
 	 }
 	 TimelineMoveAction1.prototype.mousemove = function(evnt) {
-	     timeline_move_preview(evnt, this);
+	     timeline_move_duplicate_preview(evnt, this);
 	 }
 	 TimelineMoveAction1.prototype.mouseup = function(evnt) {
 	     if (this.mouse_moved) {
-		 timeline_move();
+		 timeline_move_duplicate();
 	     }
 	 }
 
@@ -574,11 +591,11 @@
 	     this.mouse_moved = false;
 	 }
 	 TimelineMoveAction2.prototype.mousemove = function(evnt) {
-	     timeline_move_preview(evnt, this);
+	     timeline_move_duplicate_preview(evnt, this);
 	 }
 	 TimelineMoveAction2.prototype.mouseup = function(evnt) {
 	     if (this.mouse_moved) {
-		 timeline_move();
+		 timeline_move_duplicate();
 	     } else {
 		 this.timeline.handle_click(this.mousedown_evnt);
 	     }
@@ -1404,6 +1421,16 @@
 	     return cpy;
 	 }
 
+	 Stroke.prototype.clone = function() {
+	     var duplicate = new Stroke(this.start, this.colour, this.width, this.layer);
+	     duplicate.pnts = this.pnts.map(function(pnt) {
+		 var duplicate_pnt = Object.assign({}, pnt);
+		 duplicate_pnt.seq_id = current_seq_id++;
+		 return duplicate_pnt;
+	     });
+	     return duplicate;
+	 }
+
 	 // TRANSFORM
 
 	 function Transform(start, layer) {
@@ -1444,6 +1471,23 @@
 	     var cpy = Object.create(this.__proto__);
 	     Object.assign(cpy, this);
 	     return cpy;
+	 }
+
+	 Transform.prototype.clone = function() {
+	     var duplicate = new Transform(this.start, this.layer);
+	     duplicate.deltas = this.deltas.map(function(delta) {
+		 var duplicate_delta = Object.assign({}, delta);
+		 duplicate_delta.seq_id = current_seq_id++;
+		 duplicate_delta.m = getIdentityMatrix();
+		 duplicate_delta.m.a = delta.m.a;
+		 duplicate_delta.m.b = delta.m.b;
+		 duplicate_delta.m.c = delta.m.c;
+		 duplicate_delta.m.d = delta.m.d;
+		 duplicate_delta.m.e = delta.m.e;
+		 duplicate_delta.m.f = delta.m.f;
+		 return duplicate_delta;
+	     });
+	     return duplicate;
 	 }
 
 	 // VISIBILITY
@@ -1508,6 +1552,10 @@
 	     var cpy = Object.create(this.__proto__);
 	     Object.assign(cpy, this);
 	     return cpy;
+	 }
+
+	 VisibilityEvent.prototype.clone = function() {
+	     return new VisibilityEvent(this.action, this.time, current_seq_id++, this.layer);
 	 }
 
 	 // IMAGE
