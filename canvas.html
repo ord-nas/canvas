@@ -355,8 +355,15 @@
 		 this.ctx.fill();
 	     }
 
-	     // Draw the events
+	     // Draw the events. If we are doing a move/scale preview, exclude the selected
+	     // events.
+	     var selected_set =  new Set(selection);
 	     for (var event of this.events_in_view()) {
+		 if (selected_set.has(event) &&
+		     (Timeline.move_preview_delta !== null ||
+		      Timeline.scale_preview_factor !== null)) {
+		     continue;
+		 }
 		 var [x1, y1, width, height] = this.get_rect(event);
 
 		 this.ctx.beginPath();
@@ -661,7 +668,7 @@
 	     //    - Records if ctrl key pressed
 	     //    - Mousemove does a window selection preview, records move
 	     //    - Release does a windows selection if applicable, otherwise a click
-	     // 4. Right mousdown:
+	     // 4. Right mousedown:
 	     //    - Records starting point
 	     //    - Mousemove does scale preview if applicable, records move
 	     //    - Release does a scale if applicable

@@ -112,7 +112,7 @@
 ** TODO Make it so that any action on a layer selects it.
 ** TODO Make layer background change colour when selected.
 ** TODO Refactor buckets so that the the interface is more "automatic"
-** TODO Make it so that when previewing a timeline move or scale, we hide the original events so you can actually see the preview better.
+** DONE Make it so that when previewing a timeline move or scale, we hide the original events so you can actually see the preview better.
 * New Features
 ** DONE Images - layer background
 ** DONE Show/hide actions
