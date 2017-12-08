@@ -2134,6 +2134,7 @@
 	     }
 	     function set_time(event, time) {
 		 event.start += time - get_time(event);
+		 event.start = Math.max(0, event.start);
 	     }
 	     var sorted_events = events.slice(); // copy
 	     sorted_events.sort(function(a, b) { return get_time(a) - get_time(b); });
