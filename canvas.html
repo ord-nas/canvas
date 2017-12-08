@@ -2118,7 +2118,7 @@
 	 }
 
 	 function distribute_events(events, centres) {
-	     if (events.length < 2) {
+	     if (events.length < 3) {
 		 return;
 	     }
 	     function get_time(event) {
@@ -2468,7 +2468,7 @@
 		     }
 		 } else if (e.key == "d" || e.key == "D") {
 		     var centres = (e.key == "D");
-		     if (selection.length >= 2) {
+		     if (selection.length >= 3) {
 			 remove_events(selection);
 			 distribute_events(selection, centres);
 			 add_events(selection);
