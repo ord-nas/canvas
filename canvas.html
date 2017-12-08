@@ -196,6 +196,7 @@
 	 Timeline.cursor_width = 1;
 	 Timeline.move_preview_delta = null;
 	 Timeline.duplicate_preview_delta = null;
+	 Timeline.preview_timeline = null;
 	 Timeline.scale_preview_factor = null;
 	 Timeline.scale_preview_anchor = null;
 	 Timeline.scale_preview_stretch = null;
@@ -378,12 +379,25 @@
 		 Timeline.duplicate_preview_delta !== null) {
 		 var delta = Timeline.move_preview_delta ||
 			     Timeline.duplicate_preview_delta;
+		 var min_rank_in_selection = Number.POSITIVE_INFINITY;
 		 for (var event of selection) {
-		     if (event.layer != this.layer) {
-			 continue;
+		     min_rank_in_selection = Math.min(min_rank_in_selection, event.rank);
+		 }
+		 for (var event of selection) {
+		     if (Timeline.preview_timeline === null) {
+			 if (event.layer !== this.layer) {
+			     continue;
+			 }
+		     } else {
+			 if (Timeline.preview_timeline !== this) {
+			     continue;
+			 }
 		     }
 		     var moved_event = event.shallow_copy();
 		     moved_event.start += delta;
+		     if (event.layer !== this.layer) {
+			 moved_event.rank -= min_rank_in_selection;
+		     }
 		     var [x1, y1, width, height] = this.get_rect(moved_event);
 
 		     this.ctx.beginPath();
@@ -492,6 +506,38 @@
 	     return null;
 	 }
 
+	 function move_event_to_layer(event, layer) {
+	     if (event.layer === layer) {
+		 // That was easy!
+		 return;
+	     }
+	     if (event instanceof VisibilityEvent) {
+		 event.layer = layer;
+	     } else if (event instanceof Stroke) {
+		 // We make the (kind of arbitrary) choice that when you move events between layers,
+		 // you want *now* to "line up". This is kind of arbitrary, but easy to implement,
+		 // and reasonably flexible (although a litter counter-intuitive at first, because
+		 // it means that moving an event from one layer to another does different things
+		 // depending on where the curson is).
+		 // TODO: also adjust width, once we've straightened that mess out.
+		 var original_matrix = findTransformMatrix(event.layer);
+		 var new_matrix = findTransformMatrix(layer);
+		 var conversion_matrix = invert(new_matrix).multiply(original_matrix);
+		 event.layer = layer;
+		 for (var pnt of event.pnts) {
+		     // TODO: maybe this svg_point thing is too slow ... profile!
+		     var svg_pnt = getSVGElement().createSVGPoint();
+		     svg_pnt.x = pnt.x;
+		     svg_pnt.y = pnt.y;
+		     svg_pnt = svg_pnt.matrixTransform(conversion_matrix);
+		     pnt.x = svg_pnt.x;
+		     pnt.y = svg_pnt.y;
+		 }
+	     } else { // event instanceof Transform
+		 console.log("ERROR: NOT SUPPORTED YET!");
+	     }
+	 }
+
 	 function timeline_move_duplicate_preview(evnt, move_action) {
 	     var pos = getMousePos(evnt, move_action.timeline.canvas);
 	     var initial_pos = getMousePos(move_action.mousedown_evnt, move_action.timeline.canvas);
@@ -507,6 +553,18 @@
 		     Timeline.duplicate_preview_delta = current_time - initial_time;
 		 } else {
 		     Timeline.move_preview_delta = current_time - initial_time;
+		 }
+		 // Check if we need to figure out interlayer moves
+		 if (move_action.allow_interlayer) {
+		     if (Timeline.preview_timeline !== null) {
+			 Timeline.preview_timeline.needs_redraw = true;
+		     }
+		     Timeline.preview_timeline = (getTimelineAtMousePos(evnt) ||
+						  Timeline.preview_timeline ||
+						  move_action.timeline);
+		     if (Timeline.preview_timeline !== null) {
+			 Timeline.preview_timeline.needs_redraw = true;
+		     }
 		 }
 		 // Invalidate all timelines that have events in the selection, so that they will
 		 // redraw and show the move preview.
@@ -529,21 +587,32 @@
 		 // every timeline in the selection.
 		 e.layer.timeline.needs_redraw = true;
 	     }
+	     if (Timeline.preview_timeline !== null) {
+		 Timeline.preview_timeline.needs_redraw = true;
+	     }
+	     var events_to_add = [];
 	     if (can_do_move && Timeline.move_preview_delta !== null) {
 		 remove_events(selection);
 		 for (var e of selection) {
 		     e.start += delta;
 		 }
-		 add_events(selection);
+		 events_to_add = selection;
 	     } else if (can_do_move && Timeline.duplicate_preview_delta !== null) {
-		 add_events(selection.map(function(event) {
+		 events_to_add = selection.map(function(event) {
 		     var duplicate = event.clone();
 		     duplicate.start += delta;
 		     return duplicate;
-		 }));
+		 });
 	     }
+	     if (Timeline.preview_timeline !== null) {
+		 for (var event of events_to_add) {
+		     move_event_to_layer(event, Timeline.preview_timeline.layer);
+		 }
+	     }
+	     add_events(events_to_add);
 	     Timeline.move_preview_delta = null;
 	     Timeline.duplicate_preview_delta = null;
+	     Timeline.preview_timeline = null;
 	 }
 
 	 function timeline_scale() {
@@ -571,10 +640,26 @@
 	     add_events(selection);
 	 }
 
+	 function timeline_allow_interlayer(e, timeline) {
+	     if (!e.altKey) {
+		 return false;
+	     }
+	     for (event of selection) {
+		 if (event.layer !== timeline.layer) {
+		     return false;
+		 }
+		 if (event instanceof Transform) {
+		     return false;
+		 }
+	     }
+	     return true;
+	 }
+
 	 function TimelineMoveAction1(evnt, timeline) {
 	     this.mousedown_evnt = evnt;
 	     this.timeline = timeline;
 	     this.mouse_moved = false;
+	     this.allow_interlayer = timeline_allow_interlayer(evnt, timeline);
 	 }
 	 TimelineMoveAction1.prototype.mousemove = function(evnt) {
 	     timeline_move_duplicate_preview(evnt, this);
@@ -589,6 +674,7 @@
 	     this.mousedown_evnt = evnt;
 	     this.timeline = timeline;
 	     this.mouse_moved = false;
+	     this.allow_interlayer = timeline_allow_interlayer(evnt, timeline);
 	 }
 	 TimelineMoveAction2.prototype.mousemove = function(evnt) {
 	     timeline_move_duplicate_preview(evnt, this);
@@ -1028,6 +1114,17 @@
 		 x: evt.clientX - rect.left,
 		 y: evt.clientY - rect.top,
 	     };
+	 }
+
+	 function getTimelineAtMousePos(evt) {
+	     for (layer of layers) {
+		 var canvas = layer.timeline.canvas;
+		 var pos = getMousePos(evt, canvas);
+		 if (pos.x >= 0 && pos.y >= 0 && pos.x < canvas.width && pos.y < canvas.height) {
+		     return layer.timeline;
+		 }
+	     }
+	     return null;
 	 }
 
 	 function findTransformedPoint(pnt, layer) {
