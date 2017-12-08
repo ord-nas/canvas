@@ -2423,6 +2423,28 @@
 		 } else if (!isNaN(parseInt(e.key))) {
 		     var num = (parseInt(e.key) + 9) % 10;
 		     add_visibility_event(current_layer, num);
+		 } else if (e.key == "b") {
+		     remove_events(selection);
+		     for (var event of selection) {
+			 event.start = current_project_time;
+		     }
+		     add_events(selection);
+		 } else if (e.key == "e") {
+		     var can_do = true;
+		     // Check that this action wouldn't make any of the events start before 0
+		     for (var event of selection) {
+			 if (current_project_time - (event.end() - event.begin()) < 0) {
+			     can_do = false;
+			     break;
+			 }
+		     }
+		     if (can_do) {
+			 remove_events(selection);
+			 for (var event of selection) {
+			     event.start = current_project_time - (event.end() - event.begin());
+			 }
+			 add_events(selection);
+		     }
 		 }
 	     });
 	     // Don't capture keystrokes when in text fields.
