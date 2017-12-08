@@ -60,6 +60,7 @@
 *** Duplicate?
 **** DONE Within layer
 **** TODO Between layers
+**** TODO Make duplicated strokes transformable (independent of their layer) so that they are actually useful
 *** TODO Split event
 *** TODO Evenly space out events
 *** TODO Reverse event
@@ -115,6 +116,9 @@
 ** TODO Make layer background change colour when selected.
 ** TODO Refactor buckets so that the the interface is more "automatic"
 ** DONE Make it so that when previewing a timeline move or scale, we hide the original events so you can actually see the preview better.
+** Considering adding features to strokes (& other events) so that we never need to mutate the original data. This would make strokes lossless & always revertible to the original
+*** TODO Add a time scaling parameter so the original deltas never need to be adjusted
+*** TODO (Strokes only) Add a transform parameter so that points never need to be adjusted
 * New Features
 ** DONE Images - layer background
 ** DONE Show/hide actions
