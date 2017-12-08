@@ -615,6 +615,26 @@
 	     Timeline.preview_timeline = null;
 	 }
 
+	 function get_deltas(e) {
+	     if (e instanceof Stroke) {
+		 return e.pnts;
+	     } else if (e instanceof Transform) {
+		 return e.deltas;
+	     } else if (e instanceof VisibilityEvent) {
+		 return []; // Nothing to scale!
+	     } else {
+		 console.log("ERROR: Tried to scale, but got event in selection of unknown type");
+		 return null;
+	     }
+	 }
+
+	 function scale_deltas(e, amount) {
+	     var arr = get_deltas(e);
+	     for (var p of arr) {
+		 p.time *= amount;
+	     }
+	 }
+
 	 function timeline_scale() {
 	     remove_events(selection);
 	     for (var e of selection) {
@@ -622,20 +642,7 @@
 		 if (!Timeline.scale_preview_stretch) {
 		     continue;
 		 }
-		 var arr = null;
-		 if (e instanceof Stroke) {
-		     arr = e.pnts;
-		 } else if (e instanceof Transform) {
-		     arr = e.deltas;
-		 } else if (e instanceof VisibilityEvent) {
-		     arr = []; // Nothing to scale!
-		 } else {
-		     console.log("ERROR: Tried to scale, but got event in selection of unknown type");
-		     return;
-		 }
-		 for (var p of arr) {
-		     p.time *= Timeline.scale_preview_factor;
-		 }
+		 scale_deltas(e, Timeline.scale_preview_factor);
 	     }
 	     add_events(selection);
 	 }
@@ -2138,6 +2145,40 @@
 	     }
 	 }
 
+	 function set_event_end(event, time, stretch) {
+	     if (!stretch) {
+		 // The easy case
+		 event.start = time - (event.end() - event.begin());
+		 return;
+	     }
+	     var begin = Math.min(time, event.begin());
+	     var old_duration = event.end() - event.begin();
+	     var new_duration = time - begin;
+	     if (new_duration == 0 || old_duration == 0) {
+		 // We don't do this.
+		 return;
+	     }
+	     event.start = time - new_duration;
+	     scale_deltas(event, new_duration / old_duration);
+	 }
+
+	 function set_event_start(event, time, stretch) {
+	     if (!stretch) {
+		 // The easy case
+		 event.start = time;
+		 return;
+	     }
+	     var end = Math.max(time, event.end());
+	     var old_duration = event.end() - event.begin();
+	     var new_duration = end - time;
+	     if (new_duration == 0 || old_duration == 0) {
+		 // We don't do this.
+		 return;
+	     }
+	     event.start = time;
+	     scale_deltas(event, new_duration / old_duration);
+	 }
+
 	 function create_layer_handle(layer) {
 	     var element = $(`
 	     <li style="display: list-item;" class="mjs-nestedSortable-branch mjs-nestedSortable-expanded">
@@ -2444,17 +2485,20 @@
 		 } else if (!isNaN(parseInt(e.key))) {
 		     var num = (parseInt(e.key) + 9) % 10;
 		     add_visibility_event(current_layer, num);
-		 } else if (e.key == "b") {
+		 } else if (e.key == "b" || e.key == "B") {
+		     var stretch = (e.key == "B");
 		     remove_events(selection);
 		     for (var event of selection) {
-			 event.start = current_project_time;
+			 set_event_start(event, current_project_time, stretch);
 		     }
 		     add_events(selection);
-		 } else if (e.key == "e") {
+		 } else if (e.key == "e" || e.key == "E") {
+		     var stretch = (e.key == "E");
 		     var can_do = true;
 		     // Check that this action wouldn't make any of the events start before 0
 		     for (var event of selection) {
-			 if (current_project_time - (event.end() - event.begin()) < 0) {
+			 if (current_project_time - (event.end() - event.begin()) < 0 &&
+			     !stretch) {
 			     can_do = false;
 			     break;
 			 }
@@ -2462,7 +2506,7 @@
 		     if (can_do) {
 			 remove_events(selection);
 			 for (var event of selection) {
-			     event.start = current_project_time - (event.end() - event.begin());
+			     set_event_end(event, current_project_time, stretch);
 			 }
 			 add_events(selection);
 		     }
