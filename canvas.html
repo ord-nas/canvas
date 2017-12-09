@@ -926,7 +926,7 @@
 
 	 // START LAYER DEFINITION
 
-	 function Layer(title, id, image_data_url = null) {
+	 function Layer(title, id, background_image_url = null) {
 	     var jCanvas = $('<canvas height="720px" width="1280px" style="position:absolute;left:0px;top:0px"></canvas>');
 	     this.id = "layer-" + id;
 	     jCanvas.attr('id', this.id);
@@ -958,13 +958,10 @@
 
 	     this.parent = null;
 
-	     this.image_data_url = image_data_url;
-	     this.hidden_buckets = {};
-	     this.hidden_events = [];
-	     if (this.image_data_url !== null) {
-		 var image_event = new ImageEvent(image_data_url, 0, 0, this);
-		 this.hidden_events.push(image_event);
-		 addToBucket(this.hidden_buckets, 0, image_event);
+	     this.background_image = null;
+	     if (background_image_url !== null) {
+		 this.background_image = new Image;
+		 this.background_image.src = background_image_url;
 	     }
 	 }
 
@@ -1157,11 +1154,15 @@
 	     return retval;
 	 }
 
-	 function clear(ctx) {
+	 function clear(layer, draw_background = true) {
+	     var ctx = layer.ctx;
 	     var m = ctx._matrix;
 	     ctx.resetTransform();
 	     ctx.clearRect(0, 0, 1280, 720);
 	     ctx.setMatrix(m);
+	     if (draw_background && layer.background_image !== null) {
+		 ctx.drawImage(layer.background_image, 0, 0);
+	     }
 	 }
 
 	 function compare_events(a, b) {
@@ -1178,12 +1179,19 @@
 	     }
 	 }
 
-	 function evalPeriod(start, end, buckets_list, args) {
+	 function extract_events(bucket) {
+	     var all_events = [];
+	     var i;
+	     for (i = 0; i < bucket.length; i++) {
+	 	 bucket[i].push_events_into(all_events);
+	     }
+	     all_events.sort(compare_events);
+	     return all_events;
+	 }
+
+	 function evalPeriod(start, end, buckets, args) {
 	     var i, j, bucket;
 	     var performed_action = false;
-	     if (!(buckets_list instanceof Array)) {
-		 buckets_list = [buckets_list];
-	     }
 	     if (typeof start == "number") {
 		 start = {
 		     time: start,
@@ -1199,16 +1207,10 @@
 	     var start_bucket = Math.floor(start.time / bucket_size);
 	     var end_bucket = Math.floor(end.time / bucket_size);
 	     for (bucket = start_bucket; bucket <= end_bucket; bucket++) {
-		 var events = [];
-		 for (buckets of buckets_list) {
-		     if (!(bucket in buckets)) {
-			 continue;
-		     }
-		     for (i = 0; i < buckets[bucket].length; i++) {
-			 buckets[bucket][i].push_events_into(events);
-		     }
+		 if (!(bucket in buckets)) {
+		     continue;
 		 }
-		 events.sort(compare_events);
+		 var events = extract_events(buckets[bucket]);
 		 for (i = 0; i < events.length; i++) {
 		     var event = events[i];
 		     if (event.time >= bucket * bucket_size &&
@@ -1244,7 +1246,7 @@
 	     if (ctx === undefined) {
 		 ctx = layer.ctx;
 	     }
-	     return evalPeriod(start, end, [layer.stroke_buckets, layer.hidden_buckets], [ctx]);
+	     return evalPeriod(start, end, layer.stroke_buckets, [ctx]);
 	 }
 
 	 function transformPeriod(start, end, layer, ctx, matrices) {
@@ -1374,7 +1376,7 @@
 		 compare_events(now, layer.last_draw) < 0 ||
 		 transform_changed) {
 		 console.log("CLEAR (STANDARD)");
-		 clear(layer.ctx);
+		 clear(layer);
 		 drawPeriod(0, now, layer);
 	     } else {
 		 drawPeriod(layer.last_draw, now, layer);
@@ -1416,7 +1418,7 @@
 		 layer.resetTransform();
 		 transformPeriod(0, now, layer);
 		 console.log("CLEAR (POST)");
-		 clear(layer.ctx);
+		 clear(layer);
 		 drawPeriod(0, now, layer);
 		 layer.reset_temp_canvas();
 		 layer.last_transform = now;
@@ -1426,7 +1428,7 @@
 		 var old_matrices = layer.matrices.slice(); // copy
 		 transformPeriod(layer.last_transform, now, layer);
 		 var delta = layer.ctx._matrix.multiply(invert(old_m));
-		 clear(layer.ctx);
+		 clear(layer, /*draw_background=*/false);
 		 layer.ctx.setMatrix(delta);
 		 layer.ctx.drawImage(temp_canvas, 0, 0);
 		 // Do this just to leave layer.ctx's matrix in a state that
@@ -1660,52 +1662,6 @@
 
 	 VisibilityEvent.prototype.clone = function() {
 	     return new VisibilityEvent(this.action, this.time, current_seq_id++, this.layer);
-	 }
-
-	 // IMAGE
-
-	 function ImageEvent(data_url, time, seq_id, layer) {
-	     this.data_url = data_url;
-	     this.img = new Image;
-	     this.img.src = data_url;
-	     this.start = time;
-	     this.seq_id = seq_id;
-	     this.layer = layer;
-
-	     // Define time as an alias for start
-	     Object.defineProperty(this, "time", {
-		 enumerable: true,
-		 configurable: true,
-		 get(){
-		     return this.start;
-		 },
-		 set(value){
-		     this.start = value;
-		 }
-	     });
-	 }
-
-	 ImageEvent.prototype.eval = function(args) {
-	     var ctx = args[0];
-	     ctx.drawImage(this.img, 0, 0);
-	 }
-
-	 ImageEvent.prototype.push_events_into = function(arr) {
-	     arr.push(this);
-	 }
-
-	 ImageEvent.prototype.begin = function() {
-	     return this.start;
-	 }
-
-	 ImageEvent.prototype.end = function() {
-	     return this.start;
-	 }
-
-	 ImageEvent.prototype.shallow_copy = function() {
-	     var cpy = Object.create(this.__proto__);
-	     Object.assign(cpy, this);
-	     return cpy;
 	 }
 
 	 // TRANSFORM ACTION
@@ -2203,7 +2159,7 @@
 		 delete_layer(layer);
 	     })
 	     element.find('.layer-timeline').append(layer.timeline.canvas);
-	     if (layer.image_data_url !== null) {
+	     if (layer.background_image !== null) {
 		 element.find('.layerhandle-contents').addClass('image-layer');
 	     }
 	     layer.timeline.needs_redraw = true;
