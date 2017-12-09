@@ -2136,6 +2136,58 @@
 	     scale_deltas(event, new_duration / old_duration);
 	 }
 
+	 function cut_event(event, time) {
+	     var deltas = get_deltas(event);
+	     if (deltas.length < 1) {
+		 return [event];
+	     }
+	     if (time < event.begin() || time > event.end()) {
+		 return [event];
+	     }
+	     // Find the index of the delta closest to the time
+	     var best_index = 0;
+	     for (var i = 1; i < deltas.length; i++) {
+		 if (Math.abs(deltas[i].time + event.begin() - time) <
+		     Math.abs(deltas[best_index].time + event.begin() - time)) {
+		     best_index = i;
+		 }
+	     }
+	     if (best_index == 0 || best_index == deltas.length-1) {
+		 return [event];
+	     }
+	     var first = event;
+	     var second = event.clone();
+	     var first_deltas = get_deltas(first);
+	     first_deltas.splice(best_index+1);
+
+	     // Now where we cut the second event depends on the event type.
+	     // Stroke events need to duplicate the element at best_index.
+	     // Transform events should not.
+	     var second_deltas = get_deltas(second);
+	     if (event instanceof Stroke) {
+		 second_deltas.splice(0, best_index);
+		 var shift_amount = second_deltas[0].time;
+		 for (var delta of second_deltas) {
+		     delta.time -= shift_amount;
+		 }
+		 // We want this to be *just slightly* past the end of the first event,
+		 // so that there is no overlap in the timeline. So we directly compute the
+		 // end of the first event and then add a small epsilon.
+		 second.start = first.start + first_deltas[first_deltas.length-1].time + 1e-6;
+	     } else if (event instanceof Transform) {
+		 second_deltas.splice(0, best_index+1);
+		 var shift_amount = second_deltas[0].time;
+		 for (var delta of second_deltas) {
+		     delta.time -= shift_amount;
+		 }
+		 second.start += shift_amount;
+	     } else {
+		 console.log("ERROR: Unrecognized event type in cut_event");
+		 return null;
+	     }
+	     return [first, second];
+	 }
+
 	 function create_layer_handle(layer) {
 	     var element = $(`
 	     <li style="display: list-item;" class="mjs-nestedSortable-branch mjs-nestedSortable-expanded">
@@ -2474,6 +2526,15 @@
 			 distribute_events(selection, centres);
 			 add_events(selection);
 		     }
+		 } else if (e.key == "c") {
+		     remove_events(selection);
+		     var old_selection = selection;
+		     selection = [];
+		     for (var event of old_selection) {
+			 var new_events = cut_event(event, current_project_time);
+			 Array.prototype.push.apply(selection, new_events);
+		     }
+		     add_events(selection);
 		 }
 	     });
 	     // Don't capture keystrokes when in text fields.

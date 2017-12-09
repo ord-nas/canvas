@@ -62,7 +62,7 @@
 **** DONE Between layers
 ***** TODO Think about what it would mean to implement this for transforms as well
 **** TODO Make duplicated strokes transformable (independent of their layer) so that they are actually useful
-*** TODO Split event
+*** DONE Split event
 *** DONE Evenly space out events
 *** TODO Reverse event
 *** DONE Move event from one timeline to another
