@@ -1709,8 +1709,10 @@
 
 	 TransformAction.prototype.mouseup = function(event) {
 	     if (this.active_transform !== null) {
-		 this.active_layer.finalize_event(this.active_transform);
-		 this.active_layer.redraw_on_transform_change = true;
+		 if (this.active_transform.start !== null) {
+		     this.active_layer.finalize_event(this.active_transform);
+		     this.active_layer.redraw_on_transform_change = true;
+		 }
 		 this.active_transform = null;
 		 this.active_layer = null;
 		 this.active_bucket = null;
@@ -1736,12 +1738,8 @@
 
 		     this.initial_point = pnt;
 		     this.current_point = this.initial_point;
-		     var start_time = current_project_time;
 		     this.active_layer = current_layer;
-		     this.active_transform = new Transform(start_time, this.active_layer);
-		     this.active_layer.transforms.push(this.active_transform);
-		     this.active_bucket = Math.floor(start_time / bucket_size);
-		     addToBucket(this.active_layer.transform_buckets, this.active_bucket, this.active_transform);
+		     this.active_transform = new Transform(null, this.active_layer);
 		     this.active_layer.redraw_on_transform_change = false;
 		 } else if (event.which === 3 && this.uses_guide_point) {
 		     this.guide_point = getMousePos(event);
@@ -1757,6 +1755,13 @@
 
 	 TransformAction.prototype.mousemove = function(event) {
 	     if (this.active_transform !== null) {
+		 if (this.active_transform.start === null) {
+		     this.active_transform.start = current_project_time;
+		     this.active_layer.transforms.push(this.active_transform);
+		     this.active_bucket = Math.floor(current_project_time / bucket_size);
+		     addToBucket(this.active_layer.transform_buckets, this.active_bucket, this.active_transform);
+		 }
+
 		 var pnt = getMousePos(event);
 
 		 // Check if we pass the point filter
