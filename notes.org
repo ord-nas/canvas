@@ -64,7 +64,7 @@
 **** TODO Make duplicated strokes transformable (independent of their layer) so that they are actually useful
 *** DONE Split event
 *** DONE Evenly space out events
-*** TODO Reverse event
+*** DONE Reverse event
 *** DONE Move event from one timeline to another
 *** DONE Move selected events to start/end at current time
 *** DONE Stretch selected events to start/end at current time

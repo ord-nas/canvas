@@ -1537,6 +1537,17 @@
 	     return duplicate;
 	 }
 
+	 Stroke.prototype.reverse = function() {
+	     var old_times = this.pnts.map(function (p) { return p.time; });
+	     var last = old_times[old_times.length-1];
+	     var old_seq_ids = this.pnts.map(function (p) { return p.seq_id; });
+	     this.pnts.reverse();
+	     for (var i = 0; i < this.pnts.length; i++) {
+		 this.pnts[i].time = last - old_times[this.pnts.length-i-1];
+		 this.pnts[i].seq_id = old_seq_ids[i];
+	     }
+	 }
+
 	 // TRANSFORM
 
 	 function Transform(start, layer) {
@@ -1594,6 +1605,18 @@
 		 return duplicate_delta;
 	     });
 	     return duplicate;
+	 }
+
+	 Transform.prototype.reverse = function() {
+	     var old_times = this.deltas.map(function (p) { return p.time; });
+	     var last = old_times[old_times.length-1];
+	     var old_seq_ids = this.deltas.map(function (p) { return p.seq_id; });
+	     this.deltas.reverse();
+	     for (var i = 0; i < this.deltas.length; i++) {
+		 this.deltas[i].time = last - old_times[this.deltas.length-i-1];
+		 this.deltas[i].seq_id = old_seq_ids[i];
+		 this.deltas[i].m = invert(this.deltas[i].m);
+	     }
 	 }
 
 	 // VISIBILITY
@@ -1663,6 +1686,8 @@
 	 VisibilityEvent.prototype.clone = function() {
 	     return new VisibilityEvent(this.action, this.time, current_seq_id++, this.layer);
 	 }
+
+	 VisibilityEvent.prototype.reverse = function() {}
 
 	 // TRANSFORM ACTION
 
@@ -2533,6 +2558,12 @@
 		     for (var event of old_selection) {
 			 var new_events = cut_event(event, current_project_time);
 			 Array.prototype.push.apply(selection, new_events);
+		     }
+		     add_events(selection);
+		 } else if (e.key == "r") {
+		     remove_events(selection);
+		     for (var event of selection) {
+			 event.reverse();
 		     }
 		     add_events(selection);
 		 }
