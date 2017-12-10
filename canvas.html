@@ -1689,14 +1689,54 @@
 
 	 VisibilityEvent.prototype.reverse = function() {}
 
+	 // TRANSFORM LAYER SINK
+
+	 function TransformLayerSink(layer) {
+	     this.active_layer = layer;
+	     this.active_layer.redraw_on_transform_change = false;
+	     this.active_transform = null;
+	     this.active_bucket = null;
+	 }
+
+	 TransformLayerSink.prototype.finalize = function() {
+	     if (this.active_transform !== null) {
+		 this.active_layer.finalize_event(this.active_transform);
+		 this.active_layer.redraw_on_transform_change = true;
+	     }
+	 }
+
+	 TransformLayerSink.prototype.process = function(matrix) {
+	     if (this.active_transform === null) {
+		 this.active_transform = new Transform(current_project_time, this.active_layer);
+		 this.active_layer.transforms.push(this.active_transform);
+		 this.active_bucket = Math.floor(current_project_time / bucket_size);
+		 addToBucket(this.active_layer.transform_buckets, this.active_bucket, this.active_transform);
+	     }
+
+	     var bucket = Math.floor(current_project_time / bucket_size);
+	     var delta = {
+		 m: matrix,
+		 time: current_project_time - this.active_transform.start,
+		 seq_id: current_seq_id++,
+	     };
+	     this.active_transform.deltas.push(delta);
+	     if (bucket != this.active_bucket) {
+		 for (var b = this.active_bucket + 1; b <= bucket; ++b) {
+		     addToBucket(this.active_layer.transform_buckets, b, this.active_transform);
+		 }
+		 this.active_bucket = bucket;
+	     }
+	 }
+
+	 // TRANSFORM EVENT SINK
+
 	 // TRANSFORM ACTION
 
 	 function TransformAction(matrix_fun, uses_guide_point, point_filter) {
 	     // matrix_fun signature:
 	     // matrix_fun(guide_point, initial_point, last_point, current_point)
-	     this.active_transform = null;
+	     this.active_sink = null;
 	     this.active_layer = null;
-	     this.active_bucket = null;
 	     this.matrix_fun = matrix_fun;
 	     this.point_filter = point_filter;
 	     this.uses_guide_point = uses_guide_point;
@@ -1708,14 +1748,10 @@
 	 }
 
 	 TransformAction.prototype.mouseup = function(event) {
-	     if (this.active_transform !== null) {
-		 if (this.active_transform.start !== null) {
-		     this.active_layer.finalize_event(this.active_transform);
-		     this.active_layer.redraw_on_transform_change = true;
-		 }
-		 this.active_transform = null;
+	     if (this.active_sink !== null) {
+		 this.active_sink.finalize();
+		 this.active_sink = null;
 		 this.active_layer = null;
-		 this.active_bucket = null;
 		 this.initial_point = null;
 		 this.last_point = null;
 		 this.current_point = null;
@@ -1723,7 +1759,7 @@
 	 };
 
 	 TransformAction.prototype.mousedown = function(event) {
-	     if (this.active_transform === null) {
+	     if (this.active_sink === null) {
 		 if (event.which === 1) {
 		     // If we need a guide point, check that we have one
 		     if (this.uses_guide_point && this.guide_point === null) {
@@ -1739,8 +1775,7 @@
 		     this.initial_point = pnt;
 		     this.current_point = this.initial_point;
 		     this.active_layer = current_layer;
-		     this.active_transform = new Transform(null, this.active_layer);
-		     this.active_layer.redraw_on_transform_change = false;
+		     this.active_sink = new TransformLayerSink(this.active_layer);
 		 } else if (event.which === 3 && this.uses_guide_point) {
 		     this.guide_point = getMousePos(event);
 		     var ctx = document.getElementById("tool-overlay").getContext("2d");
@@ -1754,14 +1789,7 @@
 	 };
 
 	 TransformAction.prototype.mousemove = function(event) {
-	     if (this.active_transform !== null) {
-		 if (this.active_transform.start === null) {
-		     this.active_transform.start = current_project_time;
-		     this.active_layer.transforms.push(this.active_transform);
-		     this.active_bucket = Math.floor(current_project_time / bucket_size);
-		     addToBucket(this.active_layer.transform_buckets, this.active_bucket, this.active_transform);
-		 }
-
+	     if (this.active_sink !== null) {
 		 var pnt = getMousePos(event);
 
 		 // Check if we pass the point filter
@@ -1769,8 +1797,6 @@
 		     return;
 		 }
 
-		 var project_time = current_project_time;
-		 var bucket = Math.floor(project_time / bucket_size);
 		 this.last_point = this.current_point;
 		 this.current_point = pnt;
 		 // Here's where we compute what the transform should be
@@ -1783,18 +1809,9 @@
 					   getIdentityMatrix() :
 					   findTransformMatrix(this.active_layer.parent));
 		 var actual_transform = invert(ancestor_transform).multiply(base_transform).multiply(ancestor_transform);
-		 var delta = {
-		     m: actual_transform,
-		     time: project_time - this.active_transform.start,
-		     seq_id: current_seq_id++,
-		 };
-		 this.active_transform.deltas.push(delta);
-		 if (bucket != this.active_bucket) {
-		     for (var b = this.active_bucket + 1; b <= bucket; ++b) {
-			 addToBucket(this.active_layer.transform_buckets, b, this.active_transform);
-		     }
-		     this.active_bucket = bucket;
-		 }
+
+		 // Feed the final matrix to our sink for processing.
+		 this.active_sink.process(actual_transform);
 	     }
 	 };
 
@@ -1816,7 +1833,6 @@
 	 }
 
 	 TransformAction.prototype.tick = function() { /* do nothing */ }
-
 
 	 // PAINT ACTION
 
