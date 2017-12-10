@@ -50,6 +50,10 @@
 ** TODO Smooth transforms
 *** Trace out a regular transform, like normal, from mousedown to mouseup
 *** Instead of playing back at recorded speed, playback uniformly between start time and end time
+** TODO Textbox
+*** TODO Left align
+*** TODO Centre align
+*** TODO Right align
 * Timeline view
 ** DONE Figure out HOW!
 *** Synchronized scrollbar reference: http://jsfiddle.net/kunknown/VVaEq/2/
@@ -132,5 +136,6 @@
 ** TODO Add some notion of "clears"
 *** Probably global? Not layer-specific?
 ** TODO View/edit properties of an event
+** TODO Adjust playback speed (faster or slower)
 * Sound Recording
 ** TODO Figure out HOW
