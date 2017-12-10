@@ -2110,25 +2110,35 @@
 	     }
 	 }
 
-	 function distribute_events(events, centres) {
+	 function distribute_events(events) {
 	     if (events.length < 3) {
 		 return;
 	     }
-	     function get_time(event) {
-		 if (centres) return (event.begin() + event.end()) / 2;
-		 else return event.begin();
-	     }
-	     function set_time(event, time) {
-		 event.start += time - get_time(event);
-		 event.start = Math.max(0, event.start);
-	     }
 	     var sorted_events = events.slice(); // copy
-	     sorted_events.sort(function(a, b) { return get_time(a) - get_time(b); });
-	     var begin = get_time(sorted_events[0]);
-	     var end = get_time(sorted_events[sorted_events.length-1]);
+	     sorted_events.sort(function(a, b) { return a.begin() - b.begin(); });
+	     var begin = sorted_events[0].begin();
+	     var end = sorted_events[sorted_events.length-1].begin();
 	     var step = (end - begin) / (sorted_events.length-1);
 	     for (var i = 0; i < sorted_events.length; i++) {
-		 set_time(sorted_events[i], begin + step * i);
+		 sorted_events[i].start = begin + step * i;
+	     }
+	 }
+
+	 function distribute_spaces(events) {
+	     if (events.length < 2) {
+		 return;
+	     }
+	     var sorted_events = events.slice(); // copy
+	     sorted_events.sort(function(a, b) { return a.begin() - b.begin(); });
+	     var begin = sorted_events[0].begin();
+	     var end = sorted_events.map(function(e) { return e.end(); }).reduce(function(a,b) { return Math.max(a,b); });
+	     var total_time = sorted_events.reduce( function(total, event) {
+		 return total + (event.end() - event.begin());
+	     }, 0);
+	     var total_space = (end - begin) - total_time; // May be positive or negative
+	     var step = total_space / (sorted_events.length-1);
+	     for (var i = 1; i < sorted_events.length; i++) {
+		 sorted_events[i].start = sorted_events[i-1].end() + step;
 	     }
 	 }
 
@@ -2549,11 +2559,16 @@
 			 }
 			 add_events(selection);
 		     }
-		 } else if (e.key == "d" || e.key == "D") {
-		     var centres = (e.key == "D");
+		 } else if (e.key == "d") {
 		     if (selection.length >= 3) {
 			 remove_events(selection);
-			 distribute_events(selection, centres);
+			 distribute_events(selection);
+			 add_events(selection);
+		     }
+		 } else if (e.key == "D") {
+		     if (selection.length >= 2) {
+			 remove_events(selection);
+			 distribute_spaces(selection);
 			 add_events(selection);
 		     }
 		 } else if (e.key == "c") {
