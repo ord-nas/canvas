@@ -6,6 +6,9 @@
 	<script src="jquery-ui.js"></script>
 	<script type="text/javascript" src="nestedSortable/jquery.mjs.nestedSortable.js"></script>
 	<style>
+	 .strikethrough {
+	     text-decoration: line-through;
+	 }
 	 .placeholder {
 	     outline: 1px dashed #4183C4;
 	 }
@@ -662,6 +665,30 @@
 	     return true;
 	 }
 
+	 function allow_event_transform() {
+	     if (selection.length < 1) {
+		 return false;
+	     }
+	     for (var event of selection) {
+		 if (!(event instanceof Stroke)) {
+		     return false;
+		 }
+		 if (event.layer !== current_layer) {
+		     return false;
+		 }
+	     }
+	     return true;
+	 }
+
+	 function get_new_transform_sink(layer) {
+	     if (allow_event_transform() &&
+		 $("#transform_events_checkbox").is(":checked")) {
+		 return new TransformEventSink(layer);
+	     } else {
+		 return new TransformLayerSink(layer);
+	     }
+	 }
+
 	 function TimelineMoveAction1(evnt, timeline) {
 	     this.mousedown_evnt = evnt;
 	     this.timeline = timeline;
@@ -1301,6 +1328,14 @@
 		 // TODO: should I just make this part of set_current_project_time?
 		 $("#time").val(current_project_time / 1000);
 	     }
+	     // Update state of transform checkbox
+	     if (allow_event_transform()) {
+		 $("#transform_events_checkbox").parent().removeClass("strikethrough");
+		 $("#transform_events_checkbox").prop("disabled", false);
+	     } else {
+		 $("#transform_events_checkbox").parent().addClass("strikethrough");
+		 $("#transform_events_checkbox").prop("disabled", true);
+	     }
 	     last_tick = current_project_time;
 	     window.requestAnimationFrame(tick);
 	 }
@@ -1730,6 +1765,28 @@
 
 	 // TRANSFORM EVENT SINK
 
+	 function TransformEventSink(layer) {
+	     this.active_layer = layer;
+	 }
+
+	 TransformEventSink.prototype.finalize = function() {
+	 }
+
+	 TransformEventSink.prototype.process = function(matrix) {
+	     for (var stroke of selection) {
+		 for (var pnt of stroke.pnts) {
+		     // TODO: maybe this svg_point thing is too slow ... profile!
+		     var svg_pnt = getSVGElement().createSVGPoint();
+		     svg_pnt.x = pnt.x;
+		     svg_pnt.y = pnt.y;
+		     svg_pnt = svg_pnt.matrixTransform(matrix);
+		     pnt.x = svg_pnt.x;
+		     pnt.y = svg_pnt.y;
+		 }
+	     }
+	     this.active_layer.last_draw = null;
+	 }
+
 	 // TRANSFORM ACTION
 
 	 function TransformAction(matrix_fun, uses_guide_point, point_filter) {
@@ -1775,7 +1832,7 @@
 		     this.initial_point = pnt;
 		     this.current_point = this.initial_point;
 		     this.active_layer = current_layer;
-		     this.active_sink = new TransformLayerSink(this.active_layer);
+		     this.active_sink = get_new_transform_sink(this.active_layer);
 		 } else if (event.which === 3 && this.uses_guide_point) {
 		     this.guide_point = getMousePos(event);
 		     var ctx = document.getElementById("tool-overlay").getContext("2d");
@@ -2717,6 +2774,7 @@
 	    <button type="button" id="stop">Stop</button>
 	</p>
 	<p id="tool_set"></p>
+	<p><input id="transform_events_checkbox" type="checkbox">Apply transformations to individual events</p>
 	<p>
 	    Stroke colour: <input type="color" id="stroke_colour" value="#ff0000" style="width:200px;">
 	    Stroke width: <span id="stroke_width" style="display:inline-block;width:200px;margin-left:15px"></span>
