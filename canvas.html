@@ -2586,6 +2586,17 @@
 			 event.reverse();
 		     }
 		     add_events(selection);
+		 } else if (e.key == "R") {
+		     remove_events(selection);
+		     var begin = selection.map(function(e) { return e.begin(); }).reduce(function(a,b) { return Math.min(a,b); });
+		     var end = selection.map(function(e) { return e.end(); }).reduce(function(a,b) { return Math.max(a,b); });
+		     for (var event of selection) {
+			 // Reverse each event internally
+			 event.reverse();
+			 // Now reverse the order of events
+			 event.start = begin + (end - event.end());
+		     }
+		     add_events(selection);
 		 }
 	     });
 	     // Don't capture keystrokes when in text fields.
