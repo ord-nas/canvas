@@ -58,8 +58,9 @@
 ** Editing tools
 *** TODO Copy/paste
 *** Duplicate?
-**** DONE Within layer
-**** DONE Between layers
+**** TODO Entire layers
+**** DONE Events Within layer
+**** DONE Events between layers
 ***** TODO Think about what it would mean to implement this for transforms as well
 **** TODO Make duplicated strokes transformable (independent of their layer) so that they are actually useful
 *** DONE Split event
