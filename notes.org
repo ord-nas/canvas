@@ -131,5 +131,6 @@
 ** TODO Select stroke by clicking
 ** TODO Add some notion of "clears"
 *** Probably global? Not layer-specific?
+** TODO View/edit properties of an event
 * Sound Recording
 ** TODO Figure out HOW
