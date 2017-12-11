@@ -34,14 +34,21 @@
 *** Deprecated library: https://github.com/mjsarfatti/nestedSortable
 **** Demo: http://mjsarfatti.com/sandbox/nestedSortable/
 *** TODO Add layer collapsing ?
+**** Idea: You can choose any layer to collapse. Adjacent collapsed layers get aggregated and you just get a single small layer handle that says "n collapsed layers". There is a dropdown to expand, and you can select a specific layer to expand or select "(all)". This would also solve the layer-explosion problem by allowing you to completely hide away groups of layers you aren't working on.
 ** TODO Limit the total space the layers can occupy
+** TODO Add layer clones
+*** These clones are completely uneditable, and are complete replicas of another layer (and they stay in sync with those changes).
 * New tools
 ** TODO Eraser
 ** Line
 *** TODO Free
 *** TODO Snap to horizontal/vertical/45-degree(?)
 ** TODO Circle
+*** Note: What to do in case of funky coordinate system? Maybe apply similar strategy to fix the paintbrush shape bug?
 ** TODO Rectangle
+*** Note, this is actually defined by *three* points, because rotations (and thus non-axis-aligned rectanges) are a thing
+*** Just let users draw axis-aligned (maybe?) but still need to handle non-axis aligned because the coordinate system at any point may be wonky
+*** Example points: first point on line, second point on line, point that defines height
 ** TODO Table?
 ** TODO Polygon?
 ** TODO Paintbucket
@@ -54,6 +61,12 @@
 *** TODO Left align
 *** TODO Centre align
 *** TODO Right align
+** TODO Framework idea:
+*** Each of the actual drawings inherits from Stroke
+*** The drawings all have a pnts array and all their drawing is based off that
+*** Have a single Action for as many of these as possible
+**** The Action just reports mouse events to some configurable function which returns a thing to draw
+**** The Action draws previews of the thing on the overlay layer until completed, at which point it adds the real thing to draw to the timeline
 * Timeline view
 ** DONE Figure out HOW!
 *** Synchronized scrollbar reference: http://jsfiddle.net/kunknown/VVaEq/2/
@@ -73,6 +86,7 @@
 *** DONE Move event from one timeline to another
 *** DONE Move selected events to start/end at current time
 *** DONE Stretch selected events to start/end at current time
+*** TODO Select events by rectangular selection?
 * Performance
 ** TODO Profile the drawing function (especially when it needs to redraw every frame)
 ** TODO Switch to using redraw_on_transform_change = false more often
@@ -136,6 +150,7 @@
 ** TODO Add some notion of "clears"
 *** Probably global? Not layer-specific?
 ** TODO View/edit properties of an event
+*** TODO Edit points of drawing events (specifically for non-Stroke events)
 ** TODO Adjust playback speed (faster or slower)
 * Sound Recording
 ** TODO Figure out HOW
