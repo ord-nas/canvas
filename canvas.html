@@ -6,6 +6,18 @@
 	<script src="jquery-ui.js"></script>
 	<script type="text/javascript" src="nestedSortable/jquery.mjs.nestedSortable.js"></script>
 	<style>
+	 #tool-overlay {
+	     position:absolute;
+	     left:0px;
+	     top:0px;
+	 }
+	 #tool-overlay.altered_viewport {
+	     top: -5px;
+	     left: -5px;
+	     border-style: solid;
+	     border-color: red;
+	     border-width: 5px;
+	 }
 	 .strikethrough {
 	     text-decoration: line-through;
 	 }
@@ -1145,8 +1157,8 @@
 	     }
 	     var rect = canvas.getBoundingClientRect();
 	     return {
-		 x: evt.clientX - rect.left,
-		 y: evt.clientY - rect.top,
+		 x: evt.clientX - rect.left - parseInt($(canvas).css("border-left-width")),
+		 y: evt.clientY - rect.top - parseInt($(canvas).css("border-top-width")),
 	     };
 	 }
 
@@ -1339,6 +1351,16 @@
 	     } else {
 		 $("#transform_events_checkbox").parent().addClass("strikethrough");
 		 $("#transform_events_checkbox").prop("disabled", true);
+	     }
+	     // Update viewport indicator
+	     if (!matrix_equals(viewport_matrix, getIdentityMatrix())) {
+		 $("#tool-overlay").addClass('altered_viewport');
+		 $("#viewport_state_description").text("Viewport moved!");
+		 $("#reset_viewport").css("visibility", "visible");
+	     } else {
+		 $("#tool-overlay").removeClass('altered_viewport');
+		 $("#viewport_state_description").text("Viewport is set to default.");
+		 $("#reset_viewport").css("visibility", "hidden");
 	     }
 	     last_tick = current_project_time;
 	     window.requestAnimationFrame(tick);
@@ -2742,6 +2764,7 @@
 	     $("#go").on("click", go);
 	     $("#new_layer").on("click", new_layer);
 	     $("#new_image").on("click", begin_add_image);
+	     $("#reset_viewport").on("click", function() { viewport_matrix = getIdentityMatrix(); });
 
 	     // Keystrokes
 	     $("body").on("keydown", function(e) {
@@ -2927,12 +2950,13 @@
 	    Stroke colour: <input type="color" id="stroke_colour" value="#ff0000" style="width:200px;">
 	    Stroke width: <span id="stroke_width" style="display:inline-block;width:200px;margin-left:15px"></span>
 	</p>
+	<p><span id="viewport_state_description"></span> <button type="button" id="reset_viewport">Reset Viewport</button></p>
 
 	<div id="layer_set" style="position:relative">
 	    <canvas id="background" height="720px" width="1280px" style="z-index:0;position:absolute;left:0px;top:0px">
 		Browser doesn't support canvas! Oops!
 	    </canvas>
-	    <canvas id="tool-overlay" height="720px" width="1280px" style="z-index:4;position:absolute;left:0px;top:0px">
+	    <canvas id="tool-overlay" height="720px" width="1280px">
 		Browser doesn't support canvas! Oops!
 	    </canvas>
 	</div>
