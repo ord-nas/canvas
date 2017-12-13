@@ -144,7 +144,10 @@
 ** DONE Images - layer background
 ** DONE Show/hide actions
 ** DONE Toggle sublayer animation feature
-** TODO Viewport - temporary viewpoint transformation that doesn't affect timeline
+** DONE Viewport - temporary viewpoint transformation that doesn't affect timeline
+*** TODO Add graphics to show viewport transforms
+*** TODO Add indicator when viewport is not identify
+*** TODO Add button to reset viewport
 ** TODO Global undo/redo
 ** TODO Select stroke by clicking
 ** TODO Add some notion of "clears"
