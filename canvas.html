@@ -1613,6 +1613,63 @@
 	     }
 	 }
 
+	 // Line
+
+	 function Line(start_pnt, end_pnt, start_time, end_time, colour, width, layer) {
+	     this.start = start_time;
+	     this.pnts = [{x: start_pnt.x,
+			   y: start_pnt.y,
+			   time: 0,
+			   seq_id: current_seq_id++},
+			  {x: end_pnt.x,
+			   y: end_pnt.y,
+			   time: end_time - start_time,
+			   seq_id: current_seq_id++}];
+	     this.colour = colour;
+	     this.width = width;
+	     this.layer = layer;
+	 }
+	 Line.prototype = Object.create(Stroke.prototype);
+	 Line.prototype.constructor = Line;
+
+	 Line.prototype.push_events_into = function(arr) {
+	     var num_divisions = 50; // arbitrary
+	     var dx = this.pnts[1].x - this.pnts[0].x;
+	     var dy = this.pnts[1].y - this.pnts[0].y;
+	     var dt = this.pnts[1].time - this.pnts[0].time;
+	     for (var i = 0; i < num_divisions; i++) {
+		 var start = {
+		     x: this.pnts[0].x + (dx * i / num_divisions),
+		     y: this.pnts[0].y + (dy * i / num_divisions),
+		 };
+		 var j = i + 1;
+		 var end = {
+		     x: this.pnts[0].x + (dx * j / num_divisions),
+		     y: this.pnts[0].y + (dy * j / num_divisions),
+		 };
+		 var time = this.start + this.pnts[0].time + (dt * i / (num_divisions-1));
+		 var seq_id = this.pnts[0].seq_id + (i / num_divisions);
+		 arr.push(new StrokeEvent(start,
+					  end,
+					  time,
+					  seq_id,
+					  this.colour,
+					  this.width)
+		 );
+	     }
+	 }
+
+	 Line.prototype.clone = function() {
+	     var duplicate = Object.create(this.__proto__);
+	     Object.assign(duplicate, this);
+	     duplicate.pnts = this.pnts.map(function(pnt) {
+		 var duplicate_pnt = Object.assign({}, pnt);
+		 duplicate_pnt.seq_id = current_seq_id++;
+		 return duplicate_pnt;
+	     });
+	     return duplicate;
+	 }
+
 	 // TRANSFORM
 
 	 function Transform(start, layer) {
@@ -2030,6 +2087,45 @@
 
 	 TransformAction.prototype.tick = function() { /* do nothing */ }
 
+	 // TEMP
+
+	 function TempAction() {
+	 }
+
+	 TempAction.prototype.mousedown = function(event) {
+	     this.start_pnt = getMousePos(event);
+	     this.start_time = current_project_time;
+	 }
+
+	 TempAction.prototype.mouseup = function(event) {
+	     var end_pnt = getMousePos(event);
+	     var end_time = current_project_time;
+
+	     var line = new Line(
+		 findTransformedPoint(this.start_pnt, current_layer),
+		 findTransformedPoint(end_pnt, current_layer),
+		 this.start_time,
+		 end_time,
+		 'red',
+		 1,
+		 current_layer);
+
+	     current_layer.strokes.push(line);
+	     var start_bucket = Math.floor(this.start_time / bucket_size);
+	     var end_bucket = Math.floor(end_time / bucket_size);
+	     for (var b = start_bucket; b <= end_bucket; ++b) {
+		 addToBucket(current_layer.stroke_buckets, b, line);
+	     }
+
+	     current_layer.finalize_event(line);
+	     current_layer.last_draw = null;
+	 }
+
+	 TempAction.prototype.mousemove = function(event) {}
+	 TempAction.prototype.tick = function(event) {}
+	 TempAction.prototype.start = function(event) {}
+	 TempAction.prototype.finish = function(event) {}
+
 	 // PAINT ACTION
 
 	 function PaintAction() {
@@ -2178,6 +2274,7 @@
 
 	 var actions = [
 	     {key: "paint", title: "Paint", tool: new PaintAction()},
+	     {key: "temp", title: "Temp", tool: new TempAction()},
 	     {key: "translate", title: "Translate", tool: new TransformAction(free_translation)},
 	     {key: "htranslate", title: "Horizontal Translate", tool: new TransformAction(horizontal_translation)},
 	     {key: "vtranslate", title: "Vertical Translate", tool: new TransformAction(vertical_translation)},
