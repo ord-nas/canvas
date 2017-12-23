@@ -2087,44 +2087,79 @@
 
 	 TransformAction.prototype.tick = function() { /* do nothing */ }
 
-	 // TEMP
-
-	 function TempAction() {
+	 function ClickAndDragAction(make_object) {
+	     this.start_pnt = null;
+	     this.start_time = null;
+	     this.make_object = make_object;
 	 }
 
-	 TempAction.prototype.mousedown = function(event) {
+	 ClickAndDragAction.prototype.mousedown = function(event) {
 	     this.start_pnt = getMousePos(event);
 	     this.start_time = current_project_time;
 	 }
 
-	 TempAction.prototype.mouseup = function(event) {
+	 ClickAndDragAction.prototype.mouseup = function(event) {
 	     var end_pnt = getMousePos(event);
 	     var end_time = current_project_time;
 
-	     var line = new Line(
-		 findTransformedPoint(this.start_pnt, current_layer),
-		 findTransformedPoint(end_pnt, current_layer),
-		 this.start_time,
-		 end_time,
-		 'red',
-		 1,
-		 current_layer);
-
-	     current_layer.strokes.push(line);
-	     var start_bucket = Math.floor(this.start_time / bucket_size);
-	     var end_bucket = Math.floor(end_time / bucket_size);
-	     for (var b = start_bucket; b <= end_bucket; ++b) {
-		 addToBucket(current_layer.stroke_buckets, b, line);
-	     }
-
-	     current_layer.finalize_event(line);
-	     current_layer.last_draw = null;
+	     var obj = this.make_object(this.start_pnt, end_pnt, this.start_time, end_time);
+	     this.set_obj_layer(obj, current_layer);
 	 }
 
-	 TempAction.prototype.mousemove = function(event) {}
-	 TempAction.prototype.tick = function(event) {}
-	 TempAction.prototype.start = function(event) {}
-	 TempAction.prototype.finish = function(event) {}
+	 ClickAndDragAction.prototype.mousemove = function(event) {
+	     var end_pnt = getMousePos(event);
+	     var end_time = current_project_time;
+
+	     var tmp_obj = this.make_object(this.start_pnt, end_pnt, this.start_time, end_time);
+	     this.draw_tmp(tmp_obj);
+	 }
+
+	 ClickAndDragAction.prototype.set_obj_layer = function(obj, layer) {
+	     obj.layer = layer;
+
+	     for (var pnt of obj.pnts) {
+		 var new_pnt = findTransformedPoint(pnt, layer);
+		 pnt.x = new_pnt.x;
+		 pnt.y = new_pnt.y;
+	     }
+
+	     layer.strokes.push(obj);
+	     var start_bucket = Math.floor(obj.begin() / bucket_size);
+	     var end_bucket = Math.floor(obj.end() / bucket_size);
+	     for (var b = start_bucket; b <= end_bucket; ++b) {
+		 addToBucket(current_layer.stroke_buckets, b, obj);
+	     }
+
+	     layer.finalize_event(obj);
+	     layer.last_draw = null;
+
+	     this.draw_tmp(null);
+	 }
+
+	 ClickAndDragAction.prototype.draw_tmp = function(obj) {
+	     var ctx = document.getElementById("tool-overlay").getContext("2d");
+	     ctx.clearRect(0, 0, 1280, 720);
+
+	     if (obj !== null) {
+		 var events = [];
+		 obj.push_events_into(events);
+		 events.sort(compare_events);
+		 for (var event of events) {
+		     event.eval([ctx]);
+		 }
+	     }
+	 }
+
+	 ClickAndDragAction.prototype.tick = function(event) {}
+	 ClickAndDragAction.prototype.start = function(event) {}
+	 ClickAndDragAction.prototype.finish = function(event) {}
+
+	 // Line ClickAndDragAction
+	 function make_line(start_pnt, end_pnt, start_time, end_time) {
+	     return new Line(start_pnt, end_pnt, start_time, end_time,
+			     get_current_colour(), get_current_width(),
+			     null);
+	 }
 
 	 // PAINT ACTION
 
@@ -2274,7 +2309,7 @@
 
 	 var actions = [
 	     {key: "paint", title: "Paint", tool: new PaintAction()},
-	     {key: "temp", title: "Temp", tool: new TempAction()},
+	     {key: "line", title: "Line", tool: new ClickAndDragAction(make_line)},
 	     {key: "translate", title: "Translate", tool: new TransformAction(free_translation)},
 	     {key: "htranslate", title: "Horizontal Translate", tool: new TransformAction(horizontal_translation)},
 	     {key: "vtranslate", title: "Vertical Translate", tool: new TransformAction(vertical_translation)},
