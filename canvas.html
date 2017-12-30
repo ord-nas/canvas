@@ -1850,6 +1850,8 @@
 	     }
 	 }
 
+	 TransformLayerSink.prototype.invert_through_self_transform = false;
+
 	 // TRANSFORM EVENT SINK
 
 	 function TransformEventSink(layer) {
@@ -1873,6 +1875,8 @@
 	     }
 	     this.active_layer.last_draw = null;
 	 }
+
+	 TransformEventSink.prototype.invert_through_self_transform = true;
 
 	 // VIEWPORT ACTION
 
@@ -2061,7 +2065,11 @@
 		 var ancestor_transform = (this.active_layer.parent === null ?
 					   viewport_matrix :
 					   findTransformMatrix(this.active_layer.parent));
-		 var actual_transform = invert(ancestor_transform).multiply(base_transform).multiply(ancestor_transform);
+		 var self_transform = findTransformMatrix(this.active_layer);
+		 var invert_transform = (this.active_sink.invert_through_self_transform ?
+					 self_transform :
+					 ancestor_transform);
+		 var actual_transform = invert(invert_transform).multiply(base_transform).multiply(invert_transform);
 
 		 // Feed the final matrix to our sink for processing.
 		 this.active_sink.process(actual_transform);
