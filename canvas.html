@@ -1512,6 +1512,38 @@
 	     }
 	 }
 
+	 // LineMaker
+	 function LineMaker(top_left, top_right, bottom_right, start_time, end_time, colour, width, layer) {
+	     this.x_axis = {
+		 x: top_right.x - top_left.x,
+		 y: top_right.y - top_left.y,
+	     };
+	     this.y_axis = {
+		 x: bottom_right.x - top_right.x,
+		 y: bottom_right.y - top_right.y,
+	     };
+	     this.origin = top_left;
+	     this.start_time = start_time;
+	     this.dt = end_time - start_time;
+	     this.colour = colour;
+	     this.width = width;
+	     this.layer = layer;
+	 }
+
+	 LineMaker.prototype.make_line = function(start, end) {
+	     var [sx, sy, st] = start;
+	     var [ex, ey, et] = end;
+	     return new Line({x: this.origin.x + sx * this.x_axis.x + sy * this.y_axis.x,
+			      y: this.origin.y + sx * this.x_axis.y + sy * this.y_axis.y},
+			     {x: this.origin.x + ex * this.x_axis.x + ey * this.y_axis.x,
+			      y: this.origin.y + ex * this.x_axis.y + ey * this.y_axis.y},
+			     this.start_time + st * this.dt,
+			     this.start_time + et * this.dt,
+			     this.colour,
+			     this.width,
+			     this.layer);
+	 }
+
 	 function set_current_project_time() {
 	     current_project_time = last_project_time;
 	     if (playing) {
@@ -1660,6 +1692,109 @@
 	 }
 
 	 Line.prototype.clone = function() {
+	     var duplicate = Object.create(this.__proto__);
+	     Object.assign(duplicate, this);
+	     duplicate.pnts = this.pnts.map(function(pnt) {
+		 var duplicate_pnt = Object.assign({}, pnt);
+		 duplicate_pnt.seq_id = current_seq_id++;
+		 return duplicate_pnt;
+	     });
+	     return duplicate;
+	 }
+
+	 // ObjectCollection
+
+	 function ObjectCollection(start_time, layer) {
+	     this.start = start_time;
+	     this.layer = layer;
+	     this.reversed = false;
+
+	     this.cached_objs = [];
+	     this.cached_start = null;
+	     this.cached_pnts = [];
+	     this.cached_reversed = false;
+	 }
+	 ObjectCollection.prototype = Object.create(Stroke.prototype);
+	 ObjectCollection.prototype.constructor = ObjectCollection;
+
+	 ObjectCollection.prototype.cache_is_fresh = function() {
+	     var fields = ["x", "y", "time", "seq_id"];
+	     if (this.start != this.cached_start) return false;
+	     if (this.reversed != this.cached_reversed) return false;
+	     if (this.pnts.length != this.cached_pnts.length) return false;
+	     for (var i = 0; i < this.pnts.length; i++) {
+		 for (var field of fields) {
+		     if (this.pnts[i][field] != this.cached_pnts[i][field]) return false;
+		 }
+	     }
+	     return true;
+	 }
+
+	 ObjectCollection.prototype.update_cache = function() {
+	     if (this.cache_is_fresh()) {
+		 return;
+	     }
+	     this.cached_start = this.start;
+	     this.cached_pnts = this.pnts.map(function(pnt) {
+		 return Object.assign({}, pnt);
+	     });
+	     this.cached_objs = this.create_objs();
+	     this.cached_reversed = this.reversed;
+	     if (this.reversed) {
+		 reverse_events(this.cached_objs);
+	     }
+	 }
+
+	 ObjectCollection.prototype.push_events_into = function(arr) {
+	     this.update_cache();
+	     for (var obj of this.cached_objs) {
+		 obj.push_events_into(arr);
+	     }
+	 }
+
+	 ObjectCollection.prototype.clone = function() {
+	     console.log("ERROR: Can't call clone on abstract object.");
+	 }
+
+	 ObjectCollection.prototype.reverse = function() {
+	     this.reversed = !this.reversed;
+	 }
+
+	 // Rectangle
+
+	 function Rectangle(top_left, bottom_right, start_time, end_time, colour, width, layer) {
+	     ObjectCollection.call(this, start_time, layer);
+	     this.pnts = [{x: top_left.x,
+			   y: top_left.y,
+			   time: 0,
+			   seq_id: current_seq_id++},
+			  {x: bottom_right.x,
+			   y: top_left.y,
+			   time: 0,
+			   seq_id: current_seq_id++},
+			  {x: bottom_right.x,
+			   y: bottom_right.y,
+			   time: end_time - start_time,
+			   seq_id: current_seq_id++}];
+	     this.colour = colour;
+	     this.width = width;
+	 }
+	 Rectangle.prototype = Object.create(ObjectCollection.prototype);
+	 Rectangle.prototype.constructor = Rectangle;
+
+	 Rectangle.prototype.create_objs = function() {
+	     var line_maker = new LineMaker(
+		 this.pnts[0], this.pnts[1], this.pnts[2], this.begin(), this.end(),
+		 this.colour, this.width, this.layer);
+	     return [
+		 line_maker.make_line([0, 0, 0], [1, 0, 0.25]),
+		 line_maker.make_line([1, 0, 0.25], [1, 1, 0.5]),
+		 line_maker.make_line([1, 1, 0.5], [0, 1, 0.75]),
+		 line_maker.make_line([0, 1, 0.75], [0, 0, 1]),
+	     ];
+	 }
+
+	 Rectangle.prototype.clone = function() {
 	     var duplicate = Object.create(this.__proto__);
 	     Object.assign(duplicate, this);
 	     duplicate.pnts = this.pnts.map(function(pnt) {
@@ -2169,6 +2304,13 @@
 			     null);
 	 }
 
+	 // Rectangle ClickAndDragAction
+	 function make_rect(start_pnt, end_pnt, start_time, end_time) {
+	     return new Rectangle(start_pnt, end_pnt, start_time, end_time,
+				  get_current_colour(), get_current_width(),
+				  null);
+	 }
+
 	 // PAINT ACTION
 
 	 function PaintAction() {
@@ -2318,6 +2460,7 @@
 	 var actions = [
 	     {key: "paint", title: "Paint", tool: new PaintAction()},
 	     {key: "line", title: "Line", tool: new ClickAndDragAction(make_line)},
+	     {key: "rect", title: "Rectangle", tool: new ClickAndDragAction(make_rect)},
 	     {key: "translate", title: "Translate", tool: new TransformAction(free_translation)},
 	     {key: "htranslate", title: "Horizontal Translate", tool: new TransformAction(horizontal_translation)},
 	     {key: "vtranslate", title: "Vertical Translate", tool: new TransformAction(vertical_translation)},
@@ -2579,6 +2722,17 @@
 		 return null;
 	     }
 	     return [first, second];
+	 }
+
+	 function reverse_events(events) {
+	     var begin = events.map(function(e) { return e.begin(); }).reduce(function(a,b) { return Math.min(a,b); });
+	     var end = events.map(function(e) { return e.end(); }).reduce(function(a,b) { return Math.max(a,b); });
+	     for (var event of events) {
+		 // Reverse each event internally
+		 event.reverse();
+		 // Now reverse the order of events
+		 event.start = begin + (end - event.end());
+	     }
 	 }
 
 	 function create_layer_handle(layer) {
@@ -2972,14 +3126,7 @@
 		     add_events(selection);
 		 } else if (e.key == "R") {
 		     remove_events(selection);
-		     var begin = selection.map(function(e) { return e.begin(); }).reduce(function(a,b) { return Math.min(a,b); });
-		     var end = selection.map(function(e) { return e.end(); }).reduce(function(a,b) { return Math.max(a,b); });
-		     for (var event of selection) {
-			 // Reverse each event internally
-			 event.reverse();
-			 // Now reverse the order of events
-			 event.start = begin + (end - event.end());
-		     }
+		     reverse_events(selection);
 		     add_events(selection);
 		 }
 	     });
