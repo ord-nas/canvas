@@ -1594,6 +1594,24 @@
 	     return $("#stroke_width").slider("value");
 	 }
 
+	 function get_current_table_rows() {
+	     var value = parseInt($("#table_rows_txt").val());
+	     if (isNaN(value)) {
+		 return 1;
+	     } else {
+		 return Math.max(1, value);
+	     }
+	 }
+
+	 function get_current_table_cols() {
+	     var value = parseInt($("#table_cols_txt").val());
+	     if (isNaN(value)) {
+		 return 1;
+	     } else {
+		 return Math.max(1, value);
+	     }
+	 }
+
 	 // STROKE EVENT
 
 	 function StrokeEvent(start, end, time, seq_id, colour, width) {
@@ -1829,6 +1847,64 @@
 		 line_maker.make_line([1, 1, 0.5], [0, 1, 0.5 + x_step]),
 		 line_maker.make_line([0, 1, 0.5 + x_step], [0, 0, 1]),
 	     ];
+	 }
+
+	 // Table
+
+	 function Table(top_left, bottom_right, start_time, end_time, rows, cols, colour, width, layer) {
+	     ObjectCollection.call(this, start_time, layer);
+	     this.pnts = [{x: top_left.x,
+			   y: top_left.y,
+			   time: 0,
+			   seq_id: top_left.seq_id},
+			  {x: bottom_right.x,
+			   y: top_left.y,
+			   time: 0,
+			   seq_id: bottom_right.seq_id},
+			  {x: bottom_right.x,
+			   y: bottom_right.y,
+			   time: end_time - start_time,
+			   seq_id: bottom_right.seq_id}];
+	     this.rows = rows;
+	     this.cols = cols;
+	     this.colour = colour;
+	     this.width = width;
+	 }
+	 Table.prototype = Object.create(ObjectCollection.prototype);
+	 Table.prototype.constructor = Table;
+
+	 Table.prototype.create_objs = function() {
+	     var x_len = distance(this.pnts[0], this.pnts[1]);
+	     var y_len = distance(this.pnts[1], this.pnts[2]);
+	     var line_maker = new LineMaker(
+		 this.pnts[0], this.pnts[1], this.pnts[2], this.begin(), this.end(),
+		 this.colour, this.width, this.layer);
+	     var lines = [
+		 [[0, 0, 0], [1, 0, x_len]],
+		 [[1, 0, x_len], [1, 1, x_len + y_len]],
+		 [[1, 1, x_len + y_len], [0, 1, 2 * x_len + y_len]],
+		 [[0, 1, 2 * x_len + y_len], [0, 0, 2 * x_len + 2 * y_len]],
+	     ];
+	     var t = 2 * x_len + 2 * y_len;
+	     var s = 2;
+	     for (var r = 1; r < this.rows; r++) {
+		 lines.push([
+		     [0, r / this.rows, t + s * (r / this.rows * y_len)],
+		     [1.0, r / this.rows, t + s * (r / this.rows * y_len + x_len)]]);
+	     }
+	     for (var c = 1; c < this.cols; c++) {
+		 lines.push([
+		     [c / this.cols, 0, t + s * (c / this.cols * x_len)],
+		     [c / this.cols, 1.0, t + s * (c / this.cols * x_len + y_len)]]);
+	     }
+	     var max_time = lines
+		 .map(function (l) { return l[1][2]; })
+		 .reduce(function (a,b) { return Math.max(a, b); });
+	     for (var line of lines) {
+		 line[0][2] /= max_time;
+		 line[1][2] /= max_time;
+	     }
+	     return lines.map(function (l) { return line_maker.make_line.apply(line_maker, l); });
 	 }
 
 	 // TRANSFORM
@@ -2341,6 +2417,16 @@
 				  null);
 	 }
 
+	 // Table ClickAndDragAction
+	 function make_table(start_pnt, end_pnt, start_time, end_time) {
+	     var start = {x: start_pnt.x, y: start_pnt.y, seq_id: current_seq_id++};
+	     var end = {x: end_pnt.x, y: end_pnt.y, seq_id: current_seq_id++};
+	     return new Table(start, end, start_time, end_time,
+				  get_current_table_rows(), get_current_table_cols(),
+				  get_current_colour(), get_current_width(),
+				  null);
+	 }
+
 	 // PAINT ACTION
 
 	 function PaintAction() {
@@ -2491,6 +2577,10 @@
 	     {key: "paint", title: "Paint", tool: new PaintAction()},
 	     {key: "line", title: "Line", tool: new ClickAndDragAction(make_line)},
 	     {key: "rect", title: "Rectangle", tool: new ClickAndDragAction(make_rect)},
+	     {key: "table", title: "Table", tool: new ClickAndDragAction(make_table),
+	      creation: function() {
+		  return $("<span>Table (<input type='text' id='table_rows_txt'> rows by <input type='text' id='table_cols_txt'> cols)</span>");
+	      }},
 	     {key: "translate", title: "Translate", tool: new TransformAction(free_translation)},
 	     {key: "htranslate", title: "Horizontal Translate", tool: new TransformAction(horizontal_translation)},
 	     {key: "vtranslate", title: "Vertical Translate", tool: new TransformAction(vertical_translation)},
@@ -3091,6 +3181,20 @@
 	     $("#new_image").on("click", begin_add_image);
 	     $("#reset_viewport").on("click", function() { viewport_matrix = getIdentityMatrix(); });
 
+	     var i;
+	     for (i = 0; i < actions.length; i++) {
+		 var text = (actions[i].creation !== undefined) ?
+			    actions[i].creation() :
+			    document.createTextNode(actions[i].title);
+		 $("<input type='radio' name='tool'>")
+		     .attr("value", actions[i].key)
+		     .appendTo($("#tool_set"));
+		 $("#tool_set").append(text);
+	     }
+	     $("#tool_set input:first-child").attr("checked", "checked");
+	     $("input[type=radio][name=tool]").change(tool_change);
+	     $("input[type=radio][name=tool]:checked").change();
+
 	     // Keystrokes
 	     $("body").on("keydown", function(e) {
 		 if (e.key == "Delete") {
@@ -3165,17 +3269,6 @@
 	     $("input:text").on("keydown", function(e) {
 		 e.stopPropagation();
 	     });
-
-	     var i;
-	     for (i = 0; i < actions.length; i++) {
-		 $("<input type='radio' name='tool'>")
-		     .attr("value", actions[i].key)
-		     .appendTo($("#tool_set"));
-		 $("#tool_set").append(document.createTextNode(actions[i].title));
-	     }
-	     $("#tool_set input:first-child").attr("checked", "checked");
-	     $("input[type=radio][name=tool]").change(tool_change);
-	     $("input[type=radio][name=tool]:checked").change();
 
 	     $("#stroke_width").slider({
 		 range: "min",

@@ -49,7 +49,7 @@
 *** Note, this is actually defined by *three* points, because rotations (and thus non-axis-aligned rectanges) are a thing
 *** Just let users draw axis-aligned (maybe?) but still need to handle non-axis aligned because the coordinate system at any point may be wonky
 *** Example points: first point on line, second point on line, point that defines height
-** TODO Table?
+** DONE Table?
 ** TODO Polygon?
 ** TODO Paintbucket
 ** TODO Allow brush shape to be transformed?
