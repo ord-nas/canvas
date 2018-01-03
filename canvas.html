@@ -1644,7 +1644,8 @@
 	 }
 
 	 Stroke.prototype.clone = function() {
-	     var duplicate = new Stroke(this.start, this.colour, this.width, this.layer);
+	     var duplicate = Object.create(this.__proto__);
+	     Object.assign(duplicate, this);
 	     duplicate.pnts = this.pnts.map(function(pnt) {
 		 var duplicate_pnt = Object.assign({}, pnt);
 		 duplicate_pnt.seq_id = current_seq_id++;
@@ -1811,17 +1812,6 @@
 		 line_maker.make_line([1, 1, 0.5], [0, 1, 0.75]),
 		 line_maker.make_line([0, 1, 0.75], [0, 0, 1]),
 	     ];
-	 }
-
-	 Rectangle.prototype.clone = function() {
-	     var duplicate = Object.create(this.__proto__);
-	     Object.assign(duplicate, this);
-	     duplicate.pnts = this.pnts.map(function(pnt) {
-		 var duplicate_pnt = Object.assign({}, pnt);
-		 duplicate_pnt.seq_id = current_seq_id++;
-		 return duplicate_pnt;
-	     });
-	     return duplicate;
 	 }
 
 	 // TRANSFORM
