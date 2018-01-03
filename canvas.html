@@ -1817,14 +1817,17 @@
 	 Rectangle.prototype.constructor = Rectangle;
 
 	 Rectangle.prototype.create_objs = function() {
+	     var x_len = distance(this.pnts[0], this.pnts[1]);
+	     var y_len = distance(this.pnts[1], this.pnts[2]);
+	     var x_step = 0.5 * x_len / (x_len + y_len);
 	     var line_maker = new LineMaker(
 		 this.pnts[0], this.pnts[1], this.pnts[2], this.begin(), this.end(),
 		 this.colour, this.width, this.layer);
 	     return [
-		 line_maker.make_line([0, 0, 0], [1, 0, 0.25]),
-		 line_maker.make_line([1, 0, 0.25], [1, 1, 0.5]),
-		 line_maker.make_line([1, 1, 0.5], [0, 1, 0.75]),
-		 line_maker.make_line([0, 1, 0.75], [0, 0, 1]),
+		 line_maker.make_line([0, 0, 0], [1, 0, x_step]),
+		 line_maker.make_line([1, 0, x_step], [1, 1, 0.5]),
+		 line_maker.make_line([1, 1, 0.5], [0, 1, 0.5 + x_step]),
+		 line_maker.make_line([0, 1, 0.5 + x_step], [0, 0, 1]),
 	     ];
 	 }
 
