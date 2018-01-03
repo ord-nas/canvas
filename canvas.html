@@ -1547,15 +1547,29 @@
 	     this.colour = colour;
 	     this.width = width;
 	     this.layer = layer;
+	     this.seq_id_base = Math.min(top_left.seq_id, top_right.seq_id, bottom_right.seq_id);
+	     this.seq_id_delta = Math.max(top_left.seq_id, top_right.seq_id, bottom_right.seq_id) - this.seq_id_base;
+	     this.seq_id_offset = 0;
 	 }
+
+	 LineMaker.max_seq_ids = 10000;
 
 	 LineMaker.prototype.make_line = function(start, end) {
 	     var [sx, sy, st] = start;
 	     var [ex, ey, et] = end;
+	     var sid = this.seq_id_offset++ * this.seq_id_delta / LineMaker.max_seq_ids + this.seq_id_base;
+	     var eid = this.seq_id_offset++ * this.seq_id_delta / LineMaker.max_seq_ids + this.seq_id_base;
+	     // TODO: more elegant way of handling this.
+	     if (this.seq_id_offset > LineMaker.max_seq_ids) {
+		 console.log("ERROR: Too many lines for one LineMaker!");
+		 return null;
+	     }
 	     return new Line({x: this.origin.x + sx * this.x_axis.x + sy * this.y_axis.x,
-			      y: this.origin.y + sx * this.x_axis.y + sy * this.y_axis.y},
+			      y: this.origin.y + sx * this.x_axis.y + sy * this.y_axis.y,
+			      seq_id: sid},
 			     {x: this.origin.x + ex * this.x_axis.x + ey * this.y_axis.x,
-			      y: this.origin.y + ex * this.x_axis.y + ey * this.y_axis.y},
+			      y: this.origin.y + ex * this.x_axis.y + ey * this.y_axis.y,
+			      seq_id: eid},
 			     this.start_time + st * this.dt,
 			     this.start_time + et * this.dt,
 			     this.colour,
@@ -1672,11 +1686,11 @@
 	     this.pnts = [{x: start_pnt.x,
 			   y: start_pnt.y,
 			   time: 0,
-			   seq_id: current_seq_id++},
+			   seq_id: start_pnt.seq_id},
 			  {x: end_pnt.x,
 			   y: end_pnt.y,
 			   time: end_time - start_time,
-			   seq_id: current_seq_id++}];
+			   seq_id: end_pnt.seq_id}];
 	     this.colour = colour;
 	     this.width = width;
 	     this.layer = layer;
@@ -1787,15 +1801,15 @@
 	     this.pnts = [{x: top_left.x,
 			   y: top_left.y,
 			   time: 0,
-			   seq_id: current_seq_id++},
+			   seq_id: top_left.seq_id},
 			  {x: bottom_right.x,
 			   y: top_left.y,
 			   time: 0,
-			   seq_id: current_seq_id++},
+			   seq_id: bottom_right.seq_id},
 			  {x: bottom_right.x,
 			   y: bottom_right.y,
 			   time: end_time - start_time,
-			   seq_id: current_seq_id++}];
+			   seq_id: bottom_right.seq_id}];
 	     this.colour = colour;
 	     this.width = width;
 	 }
@@ -2308,14 +2322,18 @@
 
 	 // Line ClickAndDragAction
 	 function make_line(start_pnt, end_pnt, start_time, end_time) {
-	     return new Line(start_pnt, end_pnt, start_time, end_time,
+	     var start = {x: start_pnt.x, y: start_pnt.y, seq_id: current_seq_id++};
+	     var end = {x: end_pnt.x, y: end_pnt.y, seq_id: current_seq_id++};
+	     return new Line(start, end, start_time, end_time,
 			     get_current_colour(), get_current_width(),
 			     null);
 	 }
 
 	 // Rectangle ClickAndDragAction
 	 function make_rect(start_pnt, end_pnt, start_time, end_time) {
-	     return new Rectangle(start_pnt, end_pnt, start_time, end_time,
+	     var start = {x: start_pnt.x, y: start_pnt.y, seq_id: current_seq_id++};
+	     var end = {x: end_pnt.x, y: end_pnt.y, seq_id: current_seq_id++};
+	     return new Rectangle(start, end, start_time, end_time,
 				  get_current_colour(), get_current_width(),
 				  null);
 	 }
