@@ -6,12 +6,12 @@
 	<script src="jquery-ui.js"></script>
 	<script type="text/javascript" src="nestedSortable/jquery.mjs.nestedSortable.js"></script>
 	<style>
-	 #tool-overlay {
+	 #viewport-overlay {
 	     position:absolute;
 	     left:0px;
 	     top:0px;
 	 }
-	 #tool-overlay.altered_viewport {
+	 #viewport-overlay.altered_viewport {
 	     top: -5px;
 	     left: -5px;
 	     border-style: solid;
@@ -106,6 +106,7 @@
 	 var global_mouse_action = null;
 	 var last_tick = null;
 	 var viewport_matrix = getIdentityMatrix();
+	 var last_viewport_matrix = getIdentityMatrix();
 
 	 var matrixMaker = {
 	     translation: function(x, y) {
@@ -1353,17 +1354,35 @@
 		 $("#transform_events_checkbox").prop("disabled", true);
 	     }
 	     // Update viewport indicator
+	     if (!matrix_equals(viewport_matrix, last_viewport_matrix)) {
+		 draw_viewport();
+		 last_viewport_matrix = matrix_clone(viewport_matrix);
+	     }
 	     if (!matrix_equals(viewport_matrix, getIdentityMatrix())) {
-		 $("#tool-overlay").addClass('altered_viewport');
+		 $("#viewport-overlay").addClass('altered_viewport');
 		 $("#viewport_state_description").text("Viewport moved!");
 		 $("#reset_viewport").css("visibility", "visible");
 	     } else {
-		 $("#tool-overlay").removeClass('altered_viewport');
+		 $("#viewport-overlay").removeClass('altered_viewport');
 		 $("#viewport_state_description").text("Viewport is set to default.");
 		 $("#reset_viewport").css("visibility", "hidden");
 	     }
 	     last_tick = current_project_time;
 	     window.requestAnimationFrame(tick);
+	 }
+
+	 function draw_viewport() {
+	     var canvas = $("#viewport-overlay").get(0);
+	     var ctx = canvas.getContext("2d");
+	     ctx.clearRect(0, 0, 1280, 720);
+	     if (!matrix_equals(viewport_matrix, getIdentityMatrix())) {
+		 var m = viewport_matrix;
+		 ctx.setTransform(m.a, m.b, m.c, m.d, m.e, m.f);
+		 ctx.beginPath();
+		 ctx.rect(0, 0, 1280, 720);
+		 ctx.stroke();
+		 ctx.resetTransform();
+	     }
 	 }
 
 	 function update_layer_ancestors(layer) {
@@ -2848,7 +2867,8 @@
 	     for (i = 0; i < layers.length; i++) {
 		 $(layers[i].canvas).css("z-index", layers.length-i);
 	     }
-	     $("#tool-overlay").css("z-index", layers.length+1);
+	     $("#viewport-overlay").css("z-index", layers.length+1);
+	     $("#tool-overlay").css("z-index", layers.length+2);
 
 	     // Resize the timeline (since there is more/less space available if the maximum
 	     // nesting level descreased/increased).
@@ -3243,7 +3263,10 @@
 	    <canvas id="background" height="720px" width="1280px" style="z-index:0;position:absolute;left:0px;top:0px">
 		Browser doesn't support canvas! Oops!
 	    </canvas>
-	    <canvas id="tool-overlay" height="720px" width="1280px">
+	    <canvas id="viewport-overlay" height="720px" width="1280px" style="z-index:1;">
+		Browser doesn't support canvas! Oops!
+	    </canvas>
+	    <canvas id="tool-overlay" height="720px" width="1280px" style="z-index:2;position:absolute;left:0px;top:0px">
 		Browser doesn't support canvas! Oops!
 	    </canvas>
 	</div>
