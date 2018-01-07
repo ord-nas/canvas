@@ -42,7 +42,7 @@
 ** DONE Eraser
 ** Line
 *** DONE Free
-*** TODO Snap to horizontal/vertical/45-degree(?)
+*** DONE Snap to horizontal/vertical/45-degree(?)
 ** TODO Circle
 *** Note: What to do in case of funky coordinate system? Maybe apply similar strategy to fix the paintbrush shape bug?
 ** DONE Rectangle

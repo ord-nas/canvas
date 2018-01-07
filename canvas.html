@@ -2414,6 +2414,22 @@
 			     null);
 	 }
 
+	 // Snapped line ClickAndDragAction
+	 function make_snapped_line(start_pnt, end_pnt, start_time, end_time) {
+	     var dx = end_pnt.x - start_pnt.x;
+	     var dy = end_pnt.y - start_pnt.y;
+	     var angle = Math.atan2(dy, dx);
+	     var snapped_angle = Math.round(angle / (Math.PI/4)) * Math.PI/4;
+	     var projection = Math.cos(snapped_angle) * dx + Math.sin(snapped_angle) * dy;
+	     var new_dx = projection * Math.cos(snapped_angle);
+	     var new_dy = projection * Math.sin(snapped_angle);
+	     var start = {x: start_pnt.x, y: start_pnt.y, seq_id: current_seq_id++};
+	     var end = {x: start_pnt.x + new_dx, y: start_pnt.y + new_dy, seq_id: current_seq_id++};
+	     return new Line(start, end, start_time, end_time,
+			     get_current_colour(), get_current_width(),
+			     null);
+	 }
+
 	 // Rectangle ClickAndDragAction
 	 function make_rect(start_pnt, end_pnt, start_time, end_time) {
 	     var start = {x: start_pnt.x, y: start_pnt.y, seq_id: current_seq_id++};
@@ -2583,6 +2599,7 @@
 	     {key: "paint", title: "Paint", tool: new PaintAction()},
 	     {key: "erase", title: "Erase", tool: new PaintAction(/*is_eraser=*/true)},
 	     {key: "line", title: "Line", tool: new ClickAndDragAction(make_line)},
+	     {key: "snapped_line", title: "Snapped Line", tool: new ClickAndDragAction(make_snapped_line)},
 	     {key: "rect", title: "Rectangle", tool: new ClickAndDragAction(make_rect)},
 	     {key: "table", title: "Table", tool: new ClickAndDragAction(make_table),
 	      creation: function() {
