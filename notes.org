@@ -39,7 +39,7 @@
 ** TODO Add layer clones
 *** These clones are completely uneditable, and are complete replicas of another layer (and they stay in sync with those changes).
 * New tools
-** TODO Eraser
+** DONE Eraser
 ** Line
 *** DONE Free
 *** TODO Snap to horizontal/vertical/45-degree(?)

@@ -1625,13 +1625,19 @@
 
 	 StrokeEvent.prototype.eval = function(args) {
 	     var ctx = args[0];
+	     var previous_composite_operation = ctx.globalCompositeOperation;
 	     ctx.beginPath();
 	     ctx.moveTo(this.start.x, this.start.y);
 	     ctx.lineTo(this.end.x, this.end.y);
 	     ctx.lineWidth = this.width;
 	     ctx.lineCap = 'round';
-	     ctx.strokeStyle = this.colour;
+	     if (this.colour == "eraser") {
+		 ctx.globalCompositeOperation="destination-out";
+	     } else {
+		 ctx.strokeStyle = this.colour;
+	     }
 	     ctx.stroke();
+	     ctx.globalCompositeOperation = previous_composite_operation;
 	 }
 
 	 // STROKE
@@ -2429,11 +2435,11 @@
 
 	 // PAINT ACTION
 
-	 function PaintAction() {
+	 function PaintAction(is_eraser = false) {
 	     this.active_stroke = null;
 	     this.active_layer = null;
 	     this.active_bucket = null;
-	     this.colour = null;
+	     this.is_eraser = is_eraser;
 	 }
 
 	 PaintAction.prototype.mouseup = function(event) {
@@ -2442,7 +2448,6 @@
 		 this.active_stroke = null;
 		 this.active_layer = null;
 		 this.active_bucket = null;
-		 this.colour = null;
 	     }
 	 };
 
@@ -2452,8 +2457,9 @@
 		 this.active_layer = current_layer;
 		 var pos = findTransformedPoint(this.mouse_pos, this.active_layer);
 		 var start_time = current_project_time;
+		 var colour = this.is_eraser ? "eraser" : get_current_colour();
 		 this.active_stroke = new Stroke(start_time,
-						 get_current_colour(),
+						 colour,
 						 get_current_width(),
 						 this.active_layer);
 		 this.active_stroke.pnts.push({
@@ -2575,6 +2581,7 @@
 
 	 var actions = [
 	     {key: "paint", title: "Paint", tool: new PaintAction()},
+	     {key: "erase", title: "Erase", tool: new PaintAction(/*is_eraser=*/true)},
 	     {key: "line", title: "Line", tool: new ClickAndDragAction(make_line)},
 	     {key: "rect", title: "Rectangle", tool: new ClickAndDragAction(make_rect)},
 	     {key: "table", title: "Table", tool: new ClickAndDragAction(make_table),
