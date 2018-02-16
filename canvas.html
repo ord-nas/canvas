@@ -1640,6 +1640,45 @@
 	     ctx.globalCompositeOperation = previous_composite_operation;
 	 }
 
+	 // ARC EVENT
+
+	 function ArcEvent(centre, x_axis, y_axis, start_angle, end_angle, time, seq_id, colour, width) {
+	     this.centre = centre;
+	     this.x_axis = x_axis;
+	     this.y_axis = y_axis;
+	     this.start_angle = start_angle;
+	     this.end_angle = end_angle;
+	     this.time = time;
+	     this.seq_id = seq_id;
+	     this.colour = colour;
+	     this.width = width;
+	 }
+
+	 ArcEvent.prototype.eval = function(args) {
+	     var ctx = args[0];
+	     var old_m = ctx._matrix;
+	     var axis_matrix = getIdentityMatrix();
+	     axis_matrix.a = this.x_axis.x - this.centre.x;
+	     axis_matrix.b = this.x_axis.y - this.centre.y;
+	     axis_matrix.c = this.y_axis.x - this.centre.x;
+	     axis_matrix.d = this.y_axis.y - this.centre.y;
+	     axis_matrix.e = this.centre.x;
+	     axis_matrix.f = this.centre.y;
+	     ctx.setMatrix(old_m.multiply(axis_matrix));
+	     ctx.beginPath();
+	     ctx.arc(0,
+		     0,
+		     1,
+		     this.start_angle,
+		     this.end_angle,
+		     /*counter-clockwise=*/false
+	     );
+	     ctx.lineWidth = this.width;
+	     ctx.strokeStyle = this.colour;
+	     ctx.stroke();
+	     ctx.setMatrix(old_m);
+	 }
+
 	 // STROKE
 
 	 function Stroke(start, colour, width, layer) {
@@ -1745,6 +1784,48 @@
 					  seq_id,
 					  this.colour,
 					  this.width)
+		 );
+	     }
+	 }
+
+	 // Ellipse
+
+	 function Ellipse(centre, x_axis, y_axis, start_time, end_time, colour, width, layer) {
+	     this.start = start_time;
+	     this.pnts = [{x: centre.x,
+			   y: centre.y,
+			   time: 0,
+			   seq_id: centre.seq_id},
+			  {x: x_axis.x,
+			   y: x_axis.y,
+			   time: 0,
+			   seq_id: x_axis.seq_id},
+			  {x: y_axis.x,
+			   y: y_axis.y,
+			   time: end_time - start_time,
+			   seq_id: y_axis.seq_id}];
+	     this.colour = colour;
+	     this.width = width;
+	     this.layer = layer;
+	 }
+	 Ellipse.prototype = Object.create(Stroke.prototype);
+	 Ellipse.prototype.constructor = Ellipse;
+
+	 Ellipse.prototype.push_events_into = function(arr) {
+	     var num_divisions = 50; // arbitrary
+	     var dt = this.pnts[2].time - this.pnts[0].time;
+	     for (var i = 0; i < num_divisions; i++) {
+		 var time = this.start + this.pnts[0].time + (dt * i / (num_divisions-1));
+		 var seq_id = this.pnts[0].seq_id + (i / num_divisions);
+		 arr.push(new ArcEvent(this.pnts[0],
+				       this.pnts[1],
+				       this.pnts[2],
+				       i / num_divisions * 2 * Math.PI,
+				       (i+1) / num_divisions * 2 * Math.PI,
+				       time,
+				       seq_id,
+				       this.colour,
+				       this.width)
 		 );
 	     }
 	 }
@@ -2438,6 +2519,27 @@
 				  null);
 	 }
 
+	 // Circle ClickAndDragAction
+	 function make_circle(start_pnt, end_pnt, start_time, end_time) {
+	     var centre = {x: start_pnt.x, y: start_pnt.y, seq_id: current_seq_id++};
+	     var radius = distance(start_pnt, end_pnt);
+	     var x_axis = {x: start_pnt.x + radius, y: start_pnt.y, seq_id: current_seq_id++};
+	     var y_axis = {x: start_pnt.x, y: start_pnt.y + radius, seq_id: current_seq_id++};
+	     return new Ellipse(centre, x_axis, y_axis, start_time, end_time,
+				get_current_colour(), get_current_width() / radius,
+				null);
+	 }
+
+	 function make_ellipse(start_pnt, end_pnt, start_time, end_time) {
+	     var centre = {x: start_pnt.x, y: start_pnt.y, seq_id: current_seq_id++};
+	     var radius = distance(start_pnt, end_pnt);
+	     var x_axis = {x: end_pnt.x, y: start_pnt.y, seq_id: current_seq_id++};
+	     var y_axis = {x: start_pnt.x, y: end_pnt.y, seq_id: current_seq_id++};
+	     return new Ellipse(centre, x_axis, y_axis, start_time, end_time,
+				get_current_colour(), get_current_width() / radius,
+				null);
+	 }
+
 	 // PAINT ACTION
 
 	 function PaintAction(is_eraser = false) {
@@ -2594,6 +2696,8 @@
 	      creation: function() {
 		  return $("<span>Table (<input type='text' id='table_rows_txt'> rows by <input type='text' id='table_cols_txt'> cols)</span>");
 	      }},
+	     {key: "circle", title: "Circle", tool: new ClickAndDragAction(make_circle)},
+	     {key: "ellipse", title: "Ellipse", tool: new ClickAndDragAction(make_ellipse)},
 	     {key: "translate", title: "Translate", tool: new TransformAction(free_translation)},
 	     {key: "htranslate", title: "Horizontal Translate", tool: new TransformAction(horizontal_translation)},
 	     {key: "vtranslate", title: "Vertical Translate", tool: new TransformAction(vertical_translation)},
@@ -3180,6 +3284,8 @@
 
 	     var now = new Date();
 	     last_real_time = now.getTime();
+
+	     addMatrixTrackingToContext(document.getElementById("tool-overlay").getContext("2d"));
 
 	     $("#tool-overlay").on("mousedown", canvas_mousedown);
 	     $("#tool-overlay").on("wheel", canvas_wheel);

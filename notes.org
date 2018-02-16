@@ -44,8 +44,9 @@
 ** Line
 *** DONE Free
 *** DONE Snap to horizontal/vertical/45-degree(?)
-** TODO Circle
+** DONE Circle
 *** Note: What to do in case of funky coordinate system? Maybe apply similar strategy to fix the paintbrush shape bug?
+*** TODO Figure out weird Chrome rendering bug when ellipses get skinny
 ** DONE Rectangle
 *** Note, this is actually defined by *three* points, because rotations (and thus non-axis-aligned rectanges) are a thing
 *** Just let users draw axis-aligned (maybe?) but still need to handle non-axis aligned because the coordinate system at any point may be wonky
@@ -143,6 +144,7 @@
 ** Considering adding features to strokes (& other events) so that we never need to mutate the original data. This would make strokes lossless & always revertible to the original
 *** TODO Add a time scaling parameter so the original deltas never need to be adjusted
 *** TODO (Strokes only) Add a transform parameter so that points never need to be adjusted
+** TODO Experiment with removing caps from line segments when drawing lines
 * New Features
 ** DONE Images - layer background
 ** DONE Show/hide actions
