@@ -40,6 +40,7 @@
 *** These clones are completely uneditable, and are complete replicas of another layer (and they stay in sync with those changes).
 * New tools
 ** DONE Eraser
+*** TODO Add outline of eraser so you can see how much you are erasing
 ** Line
 *** DONE Free
 *** DONE Snap to horizontal/vertical/45-degree(?)
@@ -107,6 +108,7 @@
 *** Maybe give layers a getCurrentTransform method?
 *** Maybe also make transformPeriod operate on matrix instead of context, so that we can perform this calculation on a matrix only instead of needing to temporarily mutate the context.
 ** TODO Remove all hard-coded references to height and width
+** TODO Make derived classes properly call their parent constructors
 * Bugs
 ** TODO Brush stroke width (and shape!) is affected by current transform
 *** Solution:
