@@ -1749,17 +1749,6 @@
 	     }
 	 }
 
-	 Line.prototype.clone = function() {
-	     var duplicate = Object.create(this.__proto__);
-	     Object.assign(duplicate, this);
-	     duplicate.pnts = this.pnts.map(function(pnt) {
-		 var duplicate_pnt = Object.assign({}, pnt);
-		 duplicate_pnt.seq_id = current_seq_id++;
-		 return duplicate_pnt;
-	     });
-	     return duplicate;
-	 }
-
 	 // ObjectCollection
 
 	 function ObjectCollection(start_time, layer) {
