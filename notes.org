@@ -52,7 +52,7 @@
 *** Just let users draw axis-aligned (maybe?) but still need to handle non-axis aligned because the coordinate system at any point may be wonky
 *** Example points: first point on line, second point on line, point that defines height
 ** DONE Table?
-** TODO Polygon?
+** DONE Polygon?
 ** TODO Paintbucket
 ** TODO Allow brush shape to be transformed?
 ** TODO Scale/reflect across arbitrary axix

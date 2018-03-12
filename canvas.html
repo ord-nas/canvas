@@ -1612,6 +1612,40 @@
 	     }
 	 }
 
+	 function draw_tmp_object(obj) {
+	     var ctx = document.getElementById("tool-overlay").getContext("2d");
+	     ctx.clearRect(0, 0, 1280, 720);
+
+	     if (obj !== null) {
+		 var events = [];
+		 obj.push_events_into(events);
+		 events.sort(compare_events);
+		 for (var event of events) {
+		     event.eval([ctx]);
+		 }
+	     }
+	 }
+
+	 function set_obj_layer(obj, layer) {
+	     obj.layer = layer;
+
+	     for (var pnt of obj.pnts) {
+		 var new_pnt = findTransformedPoint(pnt, layer);
+		 pnt.x = new_pnt.x;
+		 pnt.y = new_pnt.y;
+	     }
+
+	     layer.strokes.push(obj);
+	     var start_bucket = Math.floor(obj.begin() / bucket_size);
+	     var end_bucket = Math.floor(obj.end() / bucket_size);
+	     for (var b = start_bucket; b <= end_bucket; ++b) {
+		 addToBucket(current_layer.stroke_buckets, b, obj);
+	     }
+
+	     layer.finalize_event(obj);
+	     layer.last_draw = null;
+	 }
+
 	 // STROKE EVENT
 
 	 function StrokeEvent(start, end, time, seq_id, colour, width) {
@@ -1881,7 +1915,14 @@
 	 }
 
 	 ObjectCollection.prototype.clone = function() {
-	     console.log("ERROR: Can't call clone on abstract object.");
+	     var duplicate = Object.create(this.__proto__);
+	     Object.assign(duplicate, this);
+	     duplicate.pnts = this.pnts.map(function(pnt) {
+		 var duplicate_pnt = Object.assign({}, pnt);
+		 duplicate_pnt.seq_id = current_seq_id++;
+		 return duplicate_pnt;
+	     });
+	     return duplicate;
 	 }
 
 	 ObjectCollection.prototype.reverse = function() {
@@ -1923,6 +1964,49 @@
 		 line_maker.make_line([1, 1, 0.5], [0, 1, 0.5 + x_step]),
 		 line_maker.make_line([0, 1, 0.5 + x_step], [0, 0, 1]),
 	     ];
+	 }
+
+	 // Polygon
+
+	 function Polygon(pnts, start_time, colour, width, layer, smooth_time=true) {
+	     if (pnts.length < 2) {
+		 console.log("ERROR: tried to construct polygon with not enough points");
+		 console.log(pnts);
+	     }
+	     ObjectCollection.call(this, start_time, layer);
+	     this.pnts = pnts;
+	     this.colour = colour;
+	     this.width = width;
+	     this.smooth_time = smooth_time;
+	 }
+	 Polygon.prototype = Object.create(ObjectCollection.prototype);
+	 Polygon.prototype.constructor = Polygon;
+
+	 Polygon.prototype.create_objs = function() {
+	     var partial_len_sums = [0];
+	     var total_len = 0;
+	     for (var i = 0; i < this.pnts.length - 1; i++) {
+		 total_len += distance(this.pnts[i], this.pnts[i+1]);
+		 partial_len_sums.push(total_len);
+	     }
+	     var total_time = this.pnts[this.pnts.length-1].time;
+	     var objs = [];
+	     for (var i = 0; i < this.pnts.length - 1; i++) {
+		 var t1 = this.start + (this.smooth_time ?
+					partial_len_sums[i] / total_len * total_time :
+					this.pnts[i].time);
+		 var t2 = this.start + (this.smooth_time ?
+					partial_len_sums[i+1] / total_len * total_time :
+					this.pnts[i+1].time);
+		 objs.push(new Line(this.pnts[i],
+				    this.pnts[i+1],
+				    t1,
+				    t2,
+				    this.colour,
+				    this.width,
+				    this.layer));
+	     }
+	     return objs;
 	 }
 
 	 // Table
@@ -2424,7 +2508,8 @@
 	     var end_time = current_project_time;
 
 	     var obj = this.make_object(this.start_pnt, end_pnt, this.start_time, end_time);
-	     this.set_obj_layer(obj, current_layer);
+	     set_obj_layer(obj, current_layer);
+	     draw_tmp_object(null);
 	 }
 
 	 ClickAndDragAction.prototype.mousemove = function(event) {
@@ -2432,43 +2517,7 @@
 	     var end_time = current_project_time;
 
 	     var tmp_obj = this.make_object(this.start_pnt, end_pnt, this.start_time, end_time);
-	     this.draw_tmp(tmp_obj);
-	 }
-
-	 ClickAndDragAction.prototype.set_obj_layer = function(obj, layer) {
-	     obj.layer = layer;
-
-	     for (var pnt of obj.pnts) {
-		 var new_pnt = findTransformedPoint(pnt, layer);
-		 pnt.x = new_pnt.x;
-		 pnt.y = new_pnt.y;
-	     }
-
-	     layer.strokes.push(obj);
-	     var start_bucket = Math.floor(obj.begin() / bucket_size);
-	     var end_bucket = Math.floor(obj.end() / bucket_size);
-	     for (var b = start_bucket; b <= end_bucket; ++b) {
-		 addToBucket(current_layer.stroke_buckets, b, obj);
-	     }
-
-	     layer.finalize_event(obj);
-	     layer.last_draw = null;
-
-	     this.draw_tmp(null);
-	 }
-
-	 ClickAndDragAction.prototype.draw_tmp = function(obj) {
-	     var ctx = document.getElementById("tool-overlay").getContext("2d");
-	     ctx.clearRect(0, 0, 1280, 720);
-
-	     if (obj !== null) {
-		 var events = [];
-		 obj.push_events_into(events);
-		 events.sort(compare_events);
-		 for (var event of events) {
-		     event.eval([ctx]);
-		 }
-	     }
+	     draw_tmp_object(tmp_obj);
 	 }
 
 	 ClickAndDragAction.prototype.tick = function(event) {}
@@ -2530,6 +2579,7 @@
 				null);
 	 }
 
+	 // Ellipse ClickAndDragAction
 	 function make_ellipse(start_pnt, end_pnt, start_time, end_time) {
 	     var centre = {x: start_pnt.x, y: start_pnt.y, seq_id: current_seq_id++};
 	     var radius = distance(start_pnt, end_pnt);
@@ -2538,6 +2588,89 @@
 	     return new Ellipse(centre, x_axis, y_axis, start_time, end_time,
 				get_current_colour(), get_current_width() / radius,
 				null);
+	 }
+
+	 // PolygonAction
+	 function PolygonAction() {
+	     this.start();
+	 }
+
+	 PolygonAction.prototype.mousedown = function(event) {
+	     if (this.start_time === null) {
+		 this.start_time = current_project_time;
+	     }
+	     var tolerance = 5;
+	     var pnt = getMousePos(event);
+	     if (this.pnts.length > 0 && distance(pnt, this.pnts[this.pnts.length-1]) < tolerance) {
+		 this.finalize();
+		 return;
+	     }
+	     if (this.pnts.length > 0 && distance(pnt, this.pnts[0]) < tolerance) {
+		 this.pnts.push({
+		     x: this.pnts[0].x,
+		     y: this.pnts[0].y,
+		     time: current_project_time - this.start_time,
+		     seq_id: current_seq_id++,
+		 });
+		 this.finalize();
+		 return;
+	     }
+	     this.pnts.push({
+		 x: pnt.x,
+		 y: pnt.y,
+		 time: current_project_time - this.start_time,
+		 seq_id: current_seq_id++,
+	     });
+	     this.draw_tmp(null);
+	 }
+
+	 PolygonAction.prototype.mousemove = function(event) {
+	     //this.draw_tmp(getMousePos(event));
+	 }
+
+	 PolygonAction.prototype.mousemove_nodrag = function(event) {
+	     this.draw_tmp(getMousePos(event));
+	 }
+
+	 PolygonAction.prototype.mouseup = function(event) {
+	 }
+
+	 PolygonAction.prototype.draw_tmp = function(last_pnt) {
+	     console.log('called');
+	     var pnts = this.pnts.slice(); // copy
+	     if (last_pnt !== null) {
+		 pnts.push({
+		     x: last_pnt.x,
+		     y: last_pnt.y,
+		     time: current_project_time - this.start_time,
+		     seq_id: current_seq_id,
+		 });
+	     }
+	     if (pnts.length < 2) return;
+	     var polygon = new Polygon(
+		 pnts, this.start_time, get_current_colour(), get_current_width(), null);
+	     draw_tmp_object(polygon);
+	 }
+
+	 PolygonAction.prototype.finalize = function() {
+	     if (this.pnts.length >= 2) {
+		 var polygon = new Polygon(
+		     this.pnts, this.start_time, get_current_colour(), get_current_width(), null);
+		 set_obj_layer(polygon, current_layer);
+	     }
+	     draw_tmp_object(null);
+	     this.start();
+	 }
+
+	 PolygonAction.prototype.tick = function() {}
+	 PolygonAction.prototype.start = function() {
+	     this.start_time = null;
+	     this.pnts = [];
+	 }
+
+	 PolygonAction.prototype.finish = function() {
+	     draw_tmp_object(null);
+	     this.start();
 	 }
 
 	 // PAINT ACTION
@@ -2696,6 +2829,7 @@
 	      creation: function() {
 		  return $("<span>Table (<input type='text' id='table_rows_txt'> rows by <input type='text' id='table_cols_txt'> cols)</span>");
 	      }},
+	     {key: "poly", title: "Polygon", tool: new PolygonAction},
 	     {key: "circle", title: "Circle", tool: new ClickAndDragAction(make_circle)},
 	     {key: "ellipse", title: "Ellipse", tool: new ClickAndDragAction(make_ellipse)},
 	     {key: "translate", title: "Translate", tool: new TransformAction(free_translation)},
@@ -3217,6 +3351,17 @@
 	     }
 	 }
 
+	 function canvas_mousemove(event) {
+	     if (global_mouse_action) {
+		 return;
+	     }
+	     if (current_action && current_action.mousemove_nodrag) {
+		 event.stopPropagation();
+		 set_current_project_time();
+		 current_action.mousemove_nodrag(event);
+	     }
+	 }
+
 	 function canvas_wheel(event) {
 	     if (current_action && current_action.wheel) {
 		 event.stopPropagation();
@@ -3288,6 +3433,7 @@
 	     addMatrixTrackingToContext(document.getElementById("tool-overlay").getContext("2d"));
 
 	     $("#tool-overlay").on("mousedown", canvas_mousedown);
+	     $("#tool-overlay").on("mousemove", canvas_mousemove);
 	     $("#tool-overlay").on("wheel", canvas_wheel);
 	     $("body").on("mousemove", body_mousemove);
 	     $("body").on("mouseup", body_mouseup);
