@@ -1713,6 +1713,38 @@
 	     ctx.setMatrix(old_m);
 	 }
 
+	 // TEXT EVENT
+
+	 function TextEvent(centre, x_axis, y_axis, x_pos, y_pos, text, time, seq_id, colour, font) {
+	     this.centre = centre;
+	     this.x_axis = x_axis;
+	     this.y_axis = y_axis;
+	     this.x_pos = x_pos;
+	     this.y_pos = y_pos;
+	     this.text = text;
+	     this.time = time;
+	     this.seq_id = seq_id;
+	     this.colour = colour;
+	     this.font = font;
+	 }
+
+	 TextEvent.prototype.eval = function(args) {
+	     var ctx = args[0];
+	     var old_m = ctx._matrix;
+	     var axis_matrix = getIdentityMatrix();
+	     axis_matrix.a = this.x_axis.x - this.centre.x;
+	     axis_matrix.b = this.x_axis.y - this.centre.y;
+	     axis_matrix.c = this.y_axis.x - this.centre.x;
+	     axis_matrix.d = this.y_axis.y - this.centre.y;
+	     axis_matrix.e = this.centre.x;
+	     axis_matrix.f = this.centre.y;
+	     ctx.setMatrix(old_m.multiply(axis_matrix));
+	     ctx.font = this.font;
+	     ctx.fillStyle = this.colour;
+	     ctx.fillText(this.text, this.x_pos, this.y_pos);
+	     ctx.setMatrix(old_m);
+	 }
+
 	 // STROKE
 
 	 function Stroke(start, colour, width, layer) {
@@ -1863,6 +1895,9 @@
 		 );
 	     }
 	 }
+
+	 // TODO Implement reverse for ellipse.
+	 // Possibly other objects too where the default implementation doesn't work.
 
 	 // ObjectCollection
 
@@ -2067,6 +2102,120 @@
 	     return lines.map(function (l) { return line_maker.make_line.apply(line_maker, l); });
 	 }
 
+	 // Text
+
+	 // valign and halign are either -1 (left/top), 0 (centre), or 1 (right/bottom).
+	 function Text(letters, centre, x_axis, y_axis, start_time, colour, font, valign, halign, layer) {
+	     if (letters.length < 1) {
+		 console.log("ERROR: tried to construct text with not enough letters");
+	     }
+	     this.pnts = [{x: centre.x,
+			   y: centre.y,
+			   time: 0,
+			   seq_id: centre.seq_id},
+			  {x: x_axis.x,
+			   y: x_axis.y,
+			   time: 0,
+			   seq_id: x_axis.seq_id},
+			  {x: y_axis.x,
+			   y: y_axis.y,
+			   time: letters[letters.length-1].time,
+			   seq_id: y_axis.seq_id}];
+	     this.letters = letters;
+	     this.colour = colour;
+	     this.font = font;
+	     this.valign = valign;
+	     this.halign = halign;
+
+	     this.start = start_time;
+	     this.layer = layer;
+	 }
+	 Text.prototype = Object.create(Stroke.prototype);
+	 Text.prototype.constructor = Text;
+	 Text.prototype.measuring_canvas_singleton = $("<canvas></canvas>").get(0);
+	 Text.prototype.measuring_ctx_singleton = Text.prototype.measuring_canvas_singleton.getContext("2d");
+
+	 Text.prototype.push_events_into = function(arr) {
+	     var ctx = this.measuring_ctx_singleton;
+	     
+	     // Split the text into lines.
+	     var lines = [];
+	     var current_line = [];
+	     for (var letter of this.letters) {
+		 if (letter.char === "\n") {
+		     lines.push(current_line);
+		     current_line = [];
+		 } else {
+		     current_line.push(letter);
+		 }
+	     }
+	     lines.push(current_line);
+
+	     // Take measurements.
+	     ctx.font = this.font;
+	     ctx.fillStype = this.colour;
+	     var widths = lines.map(line => ctx.measureText(line.map(letter => letter.char).join("")).width);
+	     var height_measure = ctx.measureText("X");
+	     var height = height_measure.actualBoundingBoxAscent + height_measure.actualBoundingBoxDescent;
+	     var line_height = height * 1.5;
+	     var total_height = line_height * (lines.length - 1) + height;
+	     var total_width = Math.max(...widths);
+	     var top = null;
+	     if (this.valign < 0) {
+		 top = 0;
+	     } else if (this.valign > 0) {
+		 top = -1 * total_height;
+	     } else {
+		 top = -0.5 * total_height;
+	     }
+
+	     // Figure out how much to scale time by.
+	     var total_time_original = this.letters[this.letters.length-1].time;
+	     var total_time_current = this.end() - this.begin();
+	     var time_scale = total_time_original > 0 ? total_time_current / total_time_original : 1.0;
+
+	     var letter_cnt = 0;
+	     for (var i = 0; i < lines.length; i++) {
+		 for (var j = 0; j < lines[i].length; ++j) {
+		     var letter = lines[i][j];
+		     var time = this.start + letter.time * time_scale;
+		     var seq_id = this.pnts[0].seq_id + (letter_cnt / this.letters.length);
+
+		     // Figure out where to place the letter.
+		     var voffset = top + i * line_height + height;
+		     var line_width = widths[i];
+		     var left = null;
+		     if (this.halign < 0) {
+			 left = 0;
+		     } else if (this.halign > 0) {
+			 left = -1 * line_width;
+		     } else {
+			 left = -0.5 * line_width;
+		     }
+		     var substr = lines[i].slice(0, j+1).map(letter => letter.char).join("");
+		     var char = lines[i][j].char;
+		     var substr_width = ctx.measureText(substr).width;
+		     var char_width = ctx.measureText(char).width;
+		     var hoffset = left + substr_width - char_width;
+		     
+		     arr.push(new TextEvent(this.pnts[0],
+					    this.pnts[1],
+					    this.pnts[2],
+					    hoffset,
+					    voffset,
+					    char,
+					    time,
+					    seq_id,
+					    this.colour,
+					    this.font)
+		     );
+		     letter_cnt++;
+		 }
+	     }
+	 }
+	 
+	 // TODO Implement reverse for text.
+	 
 	 // TRANSFORM
 
 	 function Transform(start, layer) {
@@ -2590,6 +2739,101 @@
 				null);
 	 }
 
+	 // TextAction.
+	 function TextAction() {
+	     this.reset();
+	 }
+
+	 TextAction.prototype.keydown = function(event) {
+	     event.preventDefault();
+	     
+	     if (this.start_time === null) {
+		 // If there is no textbox currently active, ignore typing.
+		 return;
+	     }
+	     
+	     if (event.key === "Enter" && event.shiftKey) {
+		 // Shift + Enter ends the current textbox.
+		 this.maybe_create_object();
+		 this.reset();
+	     } else if (event.key === "Backspace") {
+		 // Backspace removes letters.
+		 if (this.letters.length > 0) {
+		     this.letters.pop();
+		     this.draw_tmp();
+		 }
+	     } else if (event.key === "Enter" || event.key.length === 1) {
+		 // Any other printable character is appended to the list of letters.
+		 var char = event.key === "Enter" ? "\n" : event.key;
+		 var time = current_project_time - this.start_time;
+		 this.letters.push({
+		     time: time,
+		     char: char,
+		 });
+		 this.draw_tmp();
+	     }
+	 }
+	 
+	 TextAction.prototype.mousedown = function(event) {
+	     this.maybe_create_object();
+	     this.reset();
+	     this.start_pnt = getMousePos(event);
+	     this.start_time = current_project_time;
+	     this.wants_keyboard_input = true;
+	 }
+
+	 TextAction.prototype.mouseup = function(event) {
+	 }
+
+	 TextAction.prototype.mousemove = function(event) {
+	 }
+
+	 TextAction.prototype.tick = function(event) {}
+	 TextAction.prototype.start = function(event) {}
+	 TextAction.prototype.finish = function(event) {
+	     this.maybe_create_object();
+	 }
+
+	 TextAction.prototype.reset = function() {
+	     this.start_pnt = null;
+	     this.start_time = null;
+	     this.letters = [];
+	     this.wants_keyboard_input = false;
+
+	     // TODO get real params here.
+	     this.font = "20px Georgia";
+	     this.color = "red";
+	     this.valign = -1;
+	     this.halign = -1;
+	 }
+
+	 TextAction.prototype.maybe_create_object = function() {
+	     if (this.letters.length > 0) {
+		 debug = true;
+		 var obj = make_text(this.letters, this.start_pnt, this.start_time, this.color,
+				     this.font, this.valign, this.halign);
+		 set_obj_layer(obj, current_layer);
+	     }
+	     draw_tmp_object(null);
+	 }
+
+	 TextAction.prototype.draw_tmp = function() {
+	     var tmp_obj = null;
+	     if (this.letters.length > 0) {
+		 tmp_obj = make_text(this.letters, this.start_pnt, this.start_time, this.color,
+				     this.font, this.valign, this.halign);
+	     }
+	     draw_tmp_object(tmp_obj);
+	 }
+
+	 function make_text(letters, start_pnt, start_time, color, font, valign, halign) {
+	     var center = {x: start_pnt.x, y: start_pnt.y, seq_id: current_seq_id++};
+	     var x_axis = {x: center.x + 1, y: center.y, seq_id: current_seq_id++};
+	     var y_axis = {x: center.x, y: center.y + 1, seq_id: current_seq_id++};
+	     var layer = null;
+	     return new Text(letters, center, x_axis, y_axis, start_time, color, font, valign, halign, layer);
+	 }
+	 
 	 // PolygonAction
 	 function PolygonAction() {
 	     this.start();
@@ -2832,6 +3076,7 @@
 	     {key: "poly", title: "Polygon", tool: new PolygonAction},
 	     {key: "circle", title: "Circle", tool: new ClickAndDragAction(make_circle)},
 	     {key: "ellipse", title: "Ellipse", tool: new ClickAndDragAction(make_ellipse)},
+	     {key: "text", title: "Text", tool: new TextAction()},
 	     {key: "translate", title: "Translate", tool: new TransformAction(free_translation)},
 	     {key: "htranslate", title: "Horizontal Translate", tool: new TransformAction(horizontal_translation)},
 	     {key: "vtranslate", title: "Vertical Translate", tool: new TransformAction(vertical_translation)},
@@ -3424,6 +3669,76 @@
 	     if (current_action) current_action.start();
 	 }
 
+	 function main_keydown_handler(e) {
+	     if (e.key == "Delete") {
+		 remove_events(selection);
+		 selection = [];
+	     } else if (e.key == "s") {
+		 add_visibility_event(current_layer, true);
+	     } else if (e.key == "h") {
+		 add_visibility_event(current_layer, false);
+	     } else if (!isNaN(parseInt(e.key))) {
+		 var num = (parseInt(e.key) + 9) % 10;
+		 add_visibility_event(current_layer, num);
+	     } else if (e.key == "b" || e.key == "B") {
+		 var stretch = (e.key == "B");
+		 remove_events(selection);
+		 for (var event of selection) {
+		     set_event_start(event, current_project_time, stretch);
+		 }
+		 add_events(selection);
+	     } else if (e.key == "e" || e.key == "E") {
+		 var stretch = (e.key == "E");
+		 var can_do = true;
+		 // Check that this action wouldn't make any of the events start before 0
+		 for (var event of selection) {
+		     if (current_project_time - (event.end() - event.begin()) < 0 &&
+			 !stretch) {
+			 can_do = false;
+			 break;
+		     }
+		 }
+		 if (can_do) {
+		     remove_events(selection);
+		     for (var event of selection) {
+			 set_event_end(event, current_project_time, stretch);
+		     }
+		     add_events(selection);
+		 }
+	     } else if (e.key == "d") {
+		 if (selection.length >= 3) {
+		     remove_events(selection);
+		     distribute_events(selection);
+		     add_events(selection);
+		 }
+	     } else if (e.key == "D") {
+		 if (selection.length >= 2) {
+		     remove_events(selection);
+		     distribute_spaces(selection);
+		     add_events(selection);
+		 }
+	     } else if (e.key == "c") {
+		 remove_events(selection);
+		 var old_selection = selection;
+		 selection = [];
+		 for (var event of old_selection) {
+		     var new_events = cut_event(event, current_project_time);
+		     Array.prototype.push.apply(selection, new_events);
+		 }
+		 add_events(selection);
+	     } else if (e.key == "r") {
+		 remove_events(selection);
+		 for (var event of selection) {
+		     event.reverse();
+		 }
+		 add_events(selection);
+	     } else if (e.key == "R") {
+		 remove_events(selection);
+		 reverse_events(selection);
+		 add_events(selection);
+	     }
+	 }
+
 	 $(document).ready(function () {
 	     last_project_time = 0;
 
@@ -3462,72 +3777,11 @@
 
 	     // Keystrokes
 	     $("body").on("keydown", function(e) {
-		 if (e.key == "Delete") {
-		     remove_events(selection);
-		     selection = [];
-		 } else if (e.key == "s") {
-		     add_visibility_event(current_layer, true);
-		 } else if (e.key == "h") {
-		     add_visibility_event(current_layer, false);
-		 } else if (!isNaN(parseInt(e.key))) {
-		     var num = (parseInt(e.key) + 9) % 10;
-		     add_visibility_event(current_layer, num);
-		 } else if (e.key == "b" || e.key == "B") {
-		     var stretch = (e.key == "B");
-		     remove_events(selection);
-		     for (var event of selection) {
-			 set_event_start(event, current_project_time, stretch);
-		     }
-		     add_events(selection);
-		 } else if (e.key == "e" || e.key == "E") {
-		     var stretch = (e.key == "E");
-		     var can_do = true;
-		     // Check that this action wouldn't make any of the events start before 0
-		     for (var event of selection) {
-			 if (current_project_time - (event.end() - event.begin()) < 0 &&
-			     !stretch) {
-			     can_do = false;
-			     break;
-			 }
-		     }
-		     if (can_do) {
-			 remove_events(selection);
-			 for (var event of selection) {
-			     set_event_end(event, current_project_time, stretch);
-			 }
-			 add_events(selection);
-		     }
-		 } else if (e.key == "d") {
-		     if (selection.length >= 3) {
-			 remove_events(selection);
-			 distribute_events(selection);
-			 add_events(selection);
-		     }
-		 } else if (e.key == "D") {
-		     if (selection.length >= 2) {
-			 remove_events(selection);
-			 distribute_spaces(selection);
-			 add_events(selection);
-		     }
-		 } else if (e.key == "c") {
-		     remove_events(selection);
-		     var old_selection = selection;
-		     selection = [];
-		     for (var event of old_selection) {
-			 var new_events = cut_event(event, current_project_time);
-			 Array.prototype.push.apply(selection, new_events);
-		     }
-		     add_events(selection);
-		 } else if (e.key == "r") {
-		     remove_events(selection);
-		     for (var event of selection) {
-			 event.reverse();
-		     }
-		     add_events(selection);
-		 } else if (e.key == "R") {
-		     remove_events(selection);
-		     reverse_events(selection);
-		     add_events(selection);
+		 if (current_action && current_action.wants_keyboard_input) {
+		     set_current_project_time();
+		     current_action.keydown(e);
+		 } else {
+		     main_keydown_handler(e);
 		 }
 	     });
 	     // Don't capture keystrokes when in text fields.
