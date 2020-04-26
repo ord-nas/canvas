@@ -1612,6 +1612,15 @@
 	     }
 	 }
 
+	 function get_current_text_size() {
+	     var value = parseInt($("#font_size").val());
+	     if (isNaN(value)) {
+		 return 24;
+	     } else {
+		 return Math.max(1, value);
+	     }
+	 }
+
 	 function get_current_text_alignment() {
 	     var vlookup = {top: -1, middle: 0, bottom: 1};
 	     var hlookup = {left: -1, centre: 0, right: 1};
@@ -2812,7 +2821,8 @@
 	     this.wants_keyboard_input = false;
 
 	     // TODO get real params here.
-	     this.font = "20px Georgia";
+	     var font_size = get_current_text_size();
+	     this.font = font_size + "px Georgia";
 	     this.color = get_current_colour();
 	     [this.valign, this.halign] = get_current_text_alignment();
 	 }
@@ -3102,8 +3112,11 @@
 	         <input type="radio" name="text-alignment-radio" id="bottom-right">
 	      </fieldset>`);
 	     alignment_selector.find("input").checkboxradio({ icon: false });
-	     var span = $("<span>Text</span>");
+	     var size_selector = $("<span>Size: <input type='text' id='font_size' value='24'>pt, </span>");
+	     var span = $("<span>Text (</span>");
+	     span.append(size_selector);
 	     span.append(alignment_selector);
+	     span.append(")");
 	     return span;
 	 }
 	 

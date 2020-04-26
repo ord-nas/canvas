@@ -62,7 +62,7 @@
 ** TODO Textbox
 *** DONE Basic functionality
 *** DONE Colour selection
-*** TODO Font size selection
+*** DONE Font size selection
 *** TODO Font style selection
 *** DONE Alignment selection
 ** TODO Framework idea:
