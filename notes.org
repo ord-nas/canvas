@@ -64,7 +64,7 @@
 *** DONE Colour selection
 *** TODO Font size selection
 *** TODO Font style selection
-*** TODO Alignment selection
+*** DONE Alignment selection
 ** TODO Framework idea:
 *** Each of the actual drawings inherits from Stroke
 *** The drawings all have a pnts array and all their drawing is based off that

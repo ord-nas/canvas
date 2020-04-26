@@ -1612,6 +1612,17 @@
 	     }
 	 }
 
+	 function get_current_text_alignment() {
+	     var vlookup = {top: -1, middle: 0, bottom: 1};
+	     var hlookup = {left: -1, centre: 0, right: 1};
+	     var selection = $('input[name=text-alignment-radio]:checked').attr("id");
+	     if (selection === undefined) {
+		 return [-1, -1];
+	     }
+	     var alignments = selection.split("-");
+	     return [vlookup[alignments[0]], hlookup[alignments[1]]];
+	 }
+	 
 	 function draw_tmp_object(obj) {
 	     var ctx = document.getElementById("tool-overlay").getContext("2d");
 	     ctx.clearRect(0, 0, 1280, 720);
@@ -2803,8 +2814,7 @@
 	     // TODO get real params here.
 	     this.font = "20px Georgia";
 	     this.color = get_current_colour();
-	     this.valign = -1;
-	     this.halign = -1;
+	     [this.valign, this.halign] = get_current_text_alignment();
 	 }
 
 	 TextAction.prototype.maybe_create_object = function() {
@@ -3063,20 +3073,51 @@
 	 [uniform_scale, uniform_scale_filter] = RotationAndUniformScaleMaker(false, true);
 	 [rotate_and_scale, rotate_and_scale_filter] = RotationAndUniformScaleMaker(true, true);
 
+	 function make_table_ui() {
+	     return $("<span>Table (<input type='text' id='table_rows_txt' value='5'> rows by <input type='text' id='table_cols_txt' value='5'> cols)</span>");
+	 }
+
+	 function make_text_ui() {
+	     var alignment_selector = $(`<fieldset id="text_alignment_selection" style="display:inline">
+	         <legend>Alignment</legend>
+	         <label for="top-left">X</label>
+	         <input type="radio" name="text-alignment-radio" id="top-left" checked="checked">
+	         <label for="top-centre">X</label>
+	         <input type="radio" name="text-alignment-radio" id="top-centre">
+	         <label for="top-right">X</label>
+	         <input type="radio" name="text-alignment-radio" id="top-right">
+	         <br/>
+	         <label for="middle-left">X</label>
+	         <input type="radio" name="text-alignment-radio" id="middle-left">
+	         <label for="middle-centre">X</label>
+	         <input type="radio" name="text-alignment-radio" id="middle-centre">
+	         <label for="middle-right">X</label>
+	         <input type="radio" name="text-alignment-radio" id="middle-right">
+	         <br/>
+	         <label for="bottom-left">X</label>
+	         <input type="radio" name="text-alignment-radio" id="bottom-left">
+	         <label for="bottom-centre">X</label>
+	         <input type="radio" name="text-alignment-radio" id="bottom-centre">
+	         <label for="bottom-right">X</label>
+	         <input type="radio" name="text-alignment-radio" id="bottom-right">
+	      </fieldset>`);
+	     alignment_selector.find("input").checkboxradio({ icon: false });
+	     var span = $("<span>Text</span>");
+	     span.append(alignment_selector);
+	     return span;
+	 }
+	 
 	 var actions = [
 	     {key: "paint", title: "Paint", tool: new PaintAction()},
 	     {key: "erase", title: "Erase", tool: new PaintAction(/*is_eraser=*/true)},
 	     {key: "line", title: "Line", tool: new ClickAndDragAction(make_line)},
 	     {key: "snapped_line", title: "Snapped Line", tool: new ClickAndDragAction(make_snapped_line)},
 	     {key: "rect", title: "Rectangle", tool: new ClickAndDragAction(make_rect)},
-	     {key: "table", title: "Table", tool: new ClickAndDragAction(make_table),
-	      creation: function() {
-		  return $("<span>Table (<input type='text' id='table_rows_txt'> rows by <input type='text' id='table_cols_txt'> cols)</span>");
-	      }},
+	     {key: "table", title: "Table", tool: new ClickAndDragAction(make_table), creation: make_table_ui},
 	     {key: "poly", title: "Polygon", tool: new PolygonAction},
 	     {key: "circle", title: "Circle", tool: new ClickAndDragAction(make_circle)},
 	     {key: "ellipse", title: "Ellipse", tool: new ClickAndDragAction(make_ellipse)},
-	     {key: "text", title: "Text", tool: new TextAction()},
+	     {key: "text", title: "Text", tool: new TextAction(), creation: make_text_ui},
 	     {key: "translate", title: "Translate", tool: new TransformAction(free_translation)},
 	     {key: "htranslate", title: "Horizontal Translate", tool: new TransformAction(horizontal_translation)},
 	     {key: "vtranslate", title: "Vertical Translate", tool: new TransformAction(vertical_translation)},
@@ -3760,7 +3801,7 @@
 	     $("#new_layer").on("click", new_layer);
 	     $("#new_image").on("click", begin_add_image);
 	     $("#reset_viewport").on("click", function() { viewport_matrix = getIdentityMatrix(); });
-
+	     
 	     var i;
 	     for (i = 0; i < actions.length; i++) {
 		 var text = (actions[i].creation !== undefined) ?
