@@ -1696,10 +1696,12 @@
 
 	 // ARC EVENT
 
-	 function ArcEvent(centre, x_axis, y_axis, start_angle, end_angle, time, seq_id, colour, width) {
+	 function ArcEvent(centre, x_axis, y_axis, hradius, vradius, start_angle, end_angle, time, seq_id, colour, width) {
 	     this.centre = centre;
 	     this.x_axis = x_axis;
 	     this.y_axis = y_axis;
+	     this.hradius = hradius;
+	     this.vradius = vradius;
 	     this.start_angle = start_angle;
 	     this.end_angle = end_angle;
 	     this.time = time;
@@ -1720,12 +1722,14 @@
 	     axis_matrix.f = this.centre.y;
 	     ctx.setMatrix(old_m.multiply(axis_matrix));
 	     ctx.beginPath();
-	     ctx.arc(0,
-		     0,
-		     1,
-		     this.start_angle,
-		     this.end_angle,
-		     /*counter-clockwise=*/false
+	     ctx.ellipse(0,
+			 0,
+			 this.hradius,
+			 this.vradius,
+			 0,
+			 this.start_angle,
+			 this.end_angle,
+			 /*counter-clockwise=*/false
 	     );
 	     ctx.lineWidth = this.width;
 	     ctx.strokeStyle = this.colour;
@@ -1876,7 +1880,7 @@
 
 	 // Ellipse
 
-	 function Ellipse(centre, x_axis, y_axis, start_time, end_time, colour, width, layer) {
+	 function Ellipse(centre, x_axis, y_axis, hradius, vradius, start_time, end_time, colour, width, layer) {
 	     this.start = start_time;
 	     this.pnts = [{x: centre.x,
 			   y: centre.y,
@@ -1890,6 +1894,8 @@
 			   y: y_axis.y,
 			   time: end_time - start_time,
 			   seq_id: y_axis.seq_id}];
+	     this.hradius = hradius;
+	     this.vradius = vradius;
 	     this.colour = colour;
 	     this.width = width;
 	     this.layer = layer;
@@ -1906,6 +1912,8 @@
 		 arr.push(new ArcEvent(this.pnts[0],
 				       this.pnts[1],
 				       this.pnts[2],
+				       this.hradius,
+				       this.vradius,
 				       i / num_divisions * 2 * Math.PI,
 				       (i+1) / num_divisions * 2 * Math.PI,
 				       time,
@@ -2741,21 +2749,22 @@
 	 function make_circle(start_pnt, end_pnt, start_time, end_time) {
 	     var centre = {x: start_pnt.x, y: start_pnt.y, seq_id: current_seq_id++};
 	     var radius = distance(start_pnt, end_pnt);
-	     var x_axis = {x: start_pnt.x + radius, y: start_pnt.y, seq_id: current_seq_id++};
-	     var y_axis = {x: start_pnt.x, y: start_pnt.y + radius, seq_id: current_seq_id++};
-	     return new Ellipse(centre, x_axis, y_axis, start_time, end_time,
-				get_current_colour(), get_current_width() / radius,
+	     var x_axis = {x: start_pnt.x + 1, y: start_pnt.y, seq_id: current_seq_id++};
+	     var y_axis = {x: start_pnt.x, y: start_pnt.y + 1, seq_id: current_seq_id++};
+	     return new Ellipse(centre, x_axis, y_axis, radius, radius, start_time, end_time,
+				get_current_colour(), get_current_width(),
 				null);
 	 }
 
 	 // Ellipse ClickAndDragAction
 	 function make_ellipse(start_pnt, end_pnt, start_time, end_time) {
 	     var centre = {x: start_pnt.x, y: start_pnt.y, seq_id: current_seq_id++};
-	     var radius = distance(start_pnt, end_pnt);
-	     var x_axis = {x: end_pnt.x, y: start_pnt.y, seq_id: current_seq_id++};
-	     var y_axis = {x: start_pnt.x, y: end_pnt.y, seq_id: current_seq_id++};
-	     return new Ellipse(centre, x_axis, y_axis, start_time, end_time,
-				get_current_colour(), get_current_width() / radius,
+	     var hradius = Math.abs(end_pnt.x - start_pnt.x);
+	     var vradius = Math.abs(end_pnt.y - start_pnt.y);
+	     var x_axis = {x: start_pnt.x + 1, y: start_pnt.y, seq_id: current_seq_id++};
+	     var y_axis = {x: start_pnt.x, y: start_pnt.y + 1, seq_id: current_seq_id++};
+	     return new Ellipse(centre, x_axis, y_axis, hradius, vradius, start_time, end_time,
+				get_current_colour(), get_current_width(),
 				null);
 	 }
 
