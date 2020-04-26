@@ -61,7 +61,7 @@
 *** Instead of playing back at recorded speed, playback uniformly between start time and end time
 ** TODO Textbox
 *** DONE Basic functionality
-*** TODO Colour selection
+*** DONE Colour selection
 *** TODO Font size selection
 *** TODO Font style selection
 *** TODO Alignment selection
