@@ -152,7 +152,7 @@
 ** DONE Show/hide actions
 ** DONE Toggle sublayer animation feature
 ** DONE Viewport - temporary viewpoint transformation that doesn't affect timeline
-*** TODO Add graphics to show viewport transforms
+*** DONE Add graphics to show viewport transforms
 *** DONE Add indicator when viewport is not identify
 *** DONE Add button to reset viewport
 ** TODO Global undo/redo
@@ -162,5 +162,10 @@
 ** TODO View/edit properties of an event
 *** TODO Edit points of drawing events (specifically for non-Stroke events)
 ** TODO Adjust playback speed (faster or slower)
+* UI Ideas
+** TODO Move all tools to right side of canvas
+** TODO Instead of having a small radio button beside each tool, enclose the full tool name in a button (similar to text alignment UI).
+** TODO Put all additional tool options on the right side of canvas as well, either beside or below the main tool selection.
+** TODO Hide/show additional tool options (stroke color & size, font options, table options, apply transforms to events checkbox, etc) as appropriate based on what tool is selected.
 * Sound Recording
 ** TODO Figure out HOW
