@@ -2,9 +2,11 @@
     <head>
 	<title>Canvas</title>
 	<link rel="stylesheet" href="jquery-ui.css">
+	<link href="fontpicker/dist/jquery.fontpicker.css" rel="stylesheet">
 	<script src="jquery-3.2.1.min.js"></script>
 	<script src="jquery-ui.js"></script>
 	<script type="text/javascript" src="nestedSortable/jquery.mjs.nestedSortable.js"></script>
+	<script src="fontpicker/dist/jquery.fontpicker.js"></script>
 	<style>
 	 #viewport-overlay {
 	     position:absolute;
@@ -1586,6 +1588,28 @@
 	     }
 	 }
 
+	 // Copied from fontpicker.
+	 function font_spec_to_components(fontSpec) {
+	     var tmp = fontSpec.split(':'),
+		 family = tmp[0],
+		 variant = tmp[1] || '400',
+		 italic = false, weight = 400;
+
+	     if (/(\d+)i$/.test(variant)) {
+		 italic = true;
+		 weight = RegExp.$1;
+	     }
+	     else {
+		 weight = variant;
+	     }
+
+	     return {
+		 family: family,
+		 weight: weight,
+		 italic: italic
+	     }
+	 }
+
 	 function get_current_colour() {
 	     return $("#stroke_colour").val();
 	 }
@@ -1630,6 +1654,12 @@
 	     }
 	     var alignments = selection.split("-");
 	     return [vlookup[alignments[0]], hlookup[alignments[1]]];
+	 }
+
+	 function get_current_text_style() {
+	     var selector = $("#font_selector").get(0);
+	     var spec = (selector === undefined ? "Arial:400" : selector.value);
+	     return font_spec_to_components(spec);
 	 }
 	 
 	 function draw_tmp_object(obj) {
@@ -2829,9 +2859,13 @@
 	     this.letters = [];
 	     this.wants_keyboard_input = false;
 
-	     // TODO get real params here.
 	     var font_size = get_current_text_size();
-	     this.font = font_size + "px Georgia";
+	     var text_style = get_current_text_style();
+	     var font_style = text_style.italic ? "italic" : "normal";
+	     var font_weight = text_style.weight;
+	     var font_family = text_style.family;
+	     this.font = `${font_style} ${font_weight} ${font_size}px ${font_family}`;
+	     console.log(this.font);
 	     this.color = get_current_colour();
 	     [this.valign, this.halign] = get_current_text_alignment();
 	 }
@@ -3122,7 +3156,10 @@
 	      </fieldset>`);
 	     alignment_selector.find("input").checkboxradio({ icon: false });
 	     var size_selector = $("<span>Size: <input type='text' id='font_size' value='24'>pt, </span>");
+	     var font_selector = $("<span><input type='text' id='font_selector' value='Arial:400'>, </span>");
+	     font_selector.find("#font_selector").fontpicker();
 	     var span = $("<span>Text (</span>");
+	     span.append(font_selector);
 	     span.append(size_selector);
 	     span.append(alignment_selector);
 	     span.append(")");

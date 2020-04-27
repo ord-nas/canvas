@@ -63,8 +63,10 @@
 *** DONE Basic functionality
 *** DONE Colour selection
 *** DONE Font size selection
-*** TODO Font style selection
+*** DONE Font style selection
 *** DONE Alignment selection
+*** TODO Add tool to smooth out typing (i.e. distribute letters evenly)
+*** TODO Implement splitting for text
 ** TODO Framework idea:
 *** Each of the actual drawings inherits from Stroke
 *** The drawings all have a pnts array and all their drawing is based off that
