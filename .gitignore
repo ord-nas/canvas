@@ -1,2 +1,5 @@
 # Emacs temporary files
 *~
+
+# Python byte-compiled files
+*.pyc
