@@ -109,6 +109,8 @@
 	 var last_tick = null;
 	 var viewport_matrix = getIdentityMatrix();
 	 var last_viewport_matrix = getIdentityMatrix();
+	 var tick_callbacks = {};
+	 var global_export_manager = null;
 
 	 var matrixMaker = {
 	     translation: function(x, y) {
@@ -1370,6 +1372,10 @@
 		 $("#reset_viewport").css("visibility", "hidden");
 	     }
 	     last_tick = current_project_time;
+	     for (var key in tick_callbacks) {
+		 var cb = tick_callbacks[key];
+		 cb();
+	     }
 	     window.requestAnimationFrame(tick);
 	 }
 
@@ -3769,6 +3775,180 @@
 	     if (current_action) current_action.start();
 	 }
 
+	 function ExportManager(filename, fps, width, height, start_time, end_time, success, error, progress) {
+	     this.filename = filename;
+	     this.fps = fps;
+	     this.width = width;
+	     this.height = height;
+	     this.start_time = start_time;
+	     this.end_time = end_time;
+	     this.success = success;
+	     this.error = error;
+	     this.progress = progress;
+
+	     // Make a canvas for collapsing layers.
+	     var jCanvas = $('<canvas></canvas>');
+	     jCanvas.attr("width", width);
+	     jCanvas.attr("height", height);
+	     this.canvas = jCanvas.get(0);
+	     this.ctx = this.canvas.getContext("2d");
+	 }
+
+	 ExportManager.prototype.post = function(url, data) {
+	     $.ajax({
+		 type: "POST",
+		 url: url,
+		 data: data,
+		 success: this.handle_server_response.bind(this),
+		 error: this.handle_server_response.bind(this),
+	     });
+	 }
+
+	 ExportManager.prototype.do_export = function() {
+	     this.server_status = "working";
+	     this.last_request_sent = "start_export";
+
+	     tick_callbacks["export"] = this.maybe_send_next_server_request.bind(this);
+
+	     this.post("../start_export", {
+		 filename: this.filename,
+		 fps: this.fps,
+		 frame_width: this.width,
+		 frame_height: this.height,
+	     });
+	 }
+
+	 ExportManager.prototype.cleanup = function() {
+	     delete tick_callbacks["export"];
+	 }
+
+	 ExportManager.prototype.handle_server_response = function(data, status) {
+	     if (status !== "success") {
+		 this.server_status = "error";
+		 this.error(data, status);
+		 this.cleanup();
+		 return;
+	     }
+
+	     if (this.last_request_sent === "finish_export") {
+		 this.server_status = "finished";
+		 this.success(data, status);
+		 this.cleanup();
+		 return;
+	     }
+
+	     this.server_status = "ready";
+	     this.progress(this.last_request_sent);
+	     this.maybe_send_next_server_request();
+	 }
+	 
+	 ExportManager.prototype.maybe_send_next_server_request = function() {
+	     if (this.server_status !== "ready") {
+		 return;
+	     }
+
+	     // Compute the next request.
+	     var next_request = null;
+	     var draw_time = null;
+	     if (this.last_request_sent === "start_export") {
+		 next_request = 0;
+	     } else {
+		 var i = parseInt(this.last_request_sent);
+		 if (!isNaN(i)) {
+		     next_request = i + 1;
+		 }
+	     }
+	     if (typeof next_request === "number") {
+		 draw_time = 1000.0 * (this.start_time + next_request / this.fps);
+		 if (draw_time > 1000.0 * this.end_time) {
+		     next_request = "finish_export";
+		     draw_time = null;
+		 }
+	     }
+	     if (next_request === null) {
+		 return;
+	     }
+
+	     // Send finish if applicable.
+	     if (next_request === "finish_export") {
+		 this.post("../finish_export", {});
+		 this.last_request_sent = next_request;
+		 this.server_status = "working";
+	     }
+
+	     // Handle write_frame request.
+	     if (typeof next_request === "number" && draw_time !== null) {
+		 if (last_tick === draw_time) {
+		     // If we are already at the right project time, do the export.
+		     var frame_data = this.get_current_frame_data();
+		     this.post("../write_frame", {data_url: frame_data});
+		     this.last_request_sent = next_request;
+		     this.server_status = "working";
+		 } else {
+		     // Otherwise, we need to redraw at the right time.
+		     last_project_time = draw_time;
+		     set_current_project_time();
+		     $("#time").val(current_project_time / 1000);
+		 }
+	     }
+	 }
+
+	 ExportManager.prototype.get_current_frame_data = function() {
+	     // Pull out the set of relevant layers.
+	     var layers_to_collapse = []
+	     $("#layer_set canvas").each(function(index, element) {
+		 if (element.id === "viewport-overlay" || element.id === "tool-overlay") return;
+		 var z_index = $(element).css("z-index");
+		 layers_to_collapse.push({
+		     z_index: z_index,
+		     element: element,
+		 });
+	     });
+
+	     // Sort by z-index.
+	     layers_to_collapse.sort(function(a, b) {
+		 return a.z_index - b.z_index;
+	     });
+
+	     // Collapse down to a single layer.
+	     this.ctx.clearRect(0, 0, this.width, this.height);
+	     for (var layer of layers_to_collapse) {
+		 this.ctx.drawImage(layer.element, 0, 0, this.width, this.height);
+	     }
+	     return this.canvas.toDataURL();
+	 }
+	 
+	 function export_video() {
+	     // Prep.
+	     if (current_action) current_action.finish();
+	     playing = false;
+	     
+	     // Invoke export mananger.
+	     var filename = "Video.avi";
+	     var fps = 60;
+	     var width = 1280;
+	     var height = 720;
+	     var start_time = 0.0;
+	     var end_time = 10.0;
+	     var success_fn = function(data, status) {
+		 console.log("Export success!");
+		 console.log(data);
+		 console.log(status);
+	     };
+	     var error_fn = function(data, status) {
+		 console.log("Export errored out!");
+		 console.log(data);
+		 console.log(status);
+	     };
+	     var progress_fn = function(request_name) {
+		 console.log("Request succeeded: " + request_name);
+	     };
+	     global_export_manager = new ExportManager(
+		 filename, fps, width, height, start_time, end_time,
+		 success_fn, error_fn, progress_fn);
+	     global_export_manager.do_export();
+	 }
+
 	 function main_keydown_handler(e) {
 	     if (e.key == "Delete") {
 		 remove_events(selection);
@@ -3857,6 +4037,7 @@
 	     $("#play").on("click", play);
 	     $("#stop").on("click", stop);
 	     $("#go").on("click", go);
+	     $("#export").on("click", export_video);
 	     $("#new_layer").on("click", new_layer);
 	     $("#new_image").on("click", begin_add_image);
 	     $("#reset_viewport").on("click", function() { viewport_matrix = getIdentityMatrix(); });
@@ -3973,6 +4154,7 @@
 	    <button type="button" id="go">Go</button>
 	    <button type="button" id="play">Play</button>
 	    <button type="button" id="stop">Stop</button>
+	    <button type="button" id="export">Export</button>
 	</p>
 	<p id="tool_set"></p>
 	<p><input id="transform_events_checkbox" type="checkbox">Apply transformations to individual events</p>

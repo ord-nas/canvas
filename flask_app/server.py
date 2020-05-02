@@ -18,7 +18,7 @@ class ExportManager(object):
             path = os.path.join(self.export_dir, filename)
             self.video_writer = cv2.VideoWriter(
                 path,
-                cv2.VideoWriter_fourcc('M','J','P','G'),
+                cv2.VideoWriter_fourcc('M','P','E','G'),
                 fps,
                 (frame_width,frame_height))
             return True
@@ -89,4 +89,11 @@ def finish_export():
     error_code = 200 if success else 500
     return '', error_code
 
+@app.route('/cancel_export', methods=['POST'])
+# This is the same as finish for now.
+def cancel_export():
+    global export_manager
 
+    success = export_manager.finish_export()
+    error_code = 200 if success else 500
+    return '', error_code
