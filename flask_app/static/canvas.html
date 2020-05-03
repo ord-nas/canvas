@@ -4099,6 +4099,7 @@
 	     var layers_to_collapse = []
 	     $("#layer_set canvas").each(function(index, element) {
 		 if (element.id === "viewport-overlay" || element.id === "tool-overlay") return;
+		 if ($(element).css("visibility") === "hidden") return;
 		 var z_index = $(element).css("z-index");
 		 layers_to_collapse.push({
 		     z_index: z_index,
