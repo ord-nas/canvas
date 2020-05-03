@@ -76,6 +76,12 @@
 	 #add-image label, #add-image input { display:block; }
 	 #add-image input.text { margin-bottom:0px; width:95%; padding: .4em; }
 	 #add-image fieldset { padding:0; border:0; margin-top:10px; }
+	 #export-setup label, #export-setup input { display:block; }
+	 #export-setup input.text { margin-bottom:0px; width:95%; padding: .4em; }
+	 #export-setup fieldset { padding:0; border:0; margin-top:10px; }
+	 #export-progress label { display:block; }
+	 #export-progress-percent { font-weight: bold; }
+
 	 html * {
 	     -webkit-touch-callout: none; /* iOS Safari */
 	     -webkit-user-select: none; /* Safari */
@@ -110,7 +116,6 @@
 	 var viewport_matrix = getIdentityMatrix();
 	 var last_viewport_matrix = getIdentityMatrix();
 	 var tick_callbacks = {};
-	 var global_export_manager = null;
 
 	 var matrixMaker = {
 	     translation: function(x, y) {
@@ -3220,6 +3225,7 @@
 	 var current_layer = null;
 
 	 // TODO: figure out proper encapsulation
+	 // TODO: error handling
 	 [make_rename_dialog, begin_rename_layer] = (function() {
 	     var rename_dialog = null;
 	     var current_rename_layer = null;
@@ -3305,6 +3311,136 @@
 	     }
 
 	     return [make_image_dialog, begin_add_image];
+	 })();
+
+	 // TODO: figure out proper encapsulation
+	 // TODO: error handling
+	 [make_export_dialogs, begin_export_dialog] = (function() {
+	     var export_setup_dialog = null;
+	     var export_progress_dialog = null;
+	     var export_progress_bar = null;
+	     var export_manager = null;
+
+	     function begin_export_dialog() {
+		 export_setup_dialog.dialog("open");
+	     }
+
+	     function cancel_export() {
+		 export_progress_dialog.dialog("close");
+		 export_manager.cancel_export();
+	     }
+
+	     function start_export() {
+		 // Reset the progress dialog.
+		 export_progress_bar.find(".ui-progressbar-value").css({
+		     "background": "#e9e9e9",
+		 });
+		 export_progress_bar.progressbar("value", 0);
+		 $("#export-progress-percent").text(`Current progress: 0.0%`);
+		 $("#export-progress-time").text(`(0 of ??? seconds)`);
+		 $("#export-progress-frames").text(`(0 of approximately ??? frames)`);
+		 export_progress_dialog.dialog({
+		     buttons: {
+			 "Cancel Export": cancel_export,
+		     },
+		 });
+
+		 // Switch to the progress dialog.
+		 export_setup_dialog.dialog("close");
+		 export_progress_dialog.dialog("open");
+
+		 // Prep for export.
+		 if (current_action) current_action.finish();
+		 playing = false;
+
+		 // Read params and start the export.
+		 var filename = $("#export-filename").val();
+		 var fps = parseInt($("#export-fps").val());
+		 var start_time = parseFloat($("#export-start-time").val());
+		 var end_time = parseFloat($("#export-end-time").val());
+		 var width = 1280;
+		 var height = 720;
+		 var success_fn = function(data, status) {
+		     console.log("Export success!");
+		     console.log(data);
+		     console.log(status);
+		     export_progress_bar.find(".ui-progressbar-value").css({
+			 "background": "green",
+		     });
+		     export_progress_dialog.dialog({
+			 buttons: {
+			     "Ok": function() {
+				 export_progress_dialog.dialog("close");
+			     },
+			 },
+		     });
+		 };
+		 var error_fn = function(data, status) {
+		     console.log("Export errored out!");
+		     console.log(data);
+		     console.log(status);
+		     export_progress_bar.find(".ui-progressbar-value").css({
+			 "background": "red",
+		     });
+		     $("#export-progress-percent").text("Error! Export failed!");
+		     export_progress_dialog.dialog({
+			 buttons: {
+			     "Ok": function() {
+				 export_progress_dialog.dialog("close");
+			     },
+			 },
+		     });
+		 };
+		 var progress_fn = function(p) {
+		     console.log("Request succeeded: " + p.last_request_sent);
+		     export_progress_bar.progressbar("value", p.progress_percent);
+		     $("#export-progress-percent").text(`Current progress: ${p.progress_percent.toFixed(1)}%`);
+		     $("#export-progress-time").text(`(${p.progress_time.toFixed(1)} of ${p.total_time.toFixed(1)} seconds)`);
+		     $("#export-progress-frames").text(`(${p.progress_frames} of approximately ${p.total_frames} frames)`);
+		 };
+		 export_manager = new ExportManager(
+		     filename, fps, width, height, start_time, end_time,
+		     success_fn, error_fn, progress_fn);
+		 export_manager.do_export();
+	     }
+
+	     function make_export_dialogs() {
+		 export_setup_dialog = $("#export-setup").dialog({
+		     autoOpen: false,
+		     modal: true,
+		     buttons: {
+			 "Start Export": start_export,
+			 "Cancel": function() {
+			     export_setup_dialog.dialog("close");
+			 }
+		     },
+		 });
+		 export_setup_dialog.find("form").on("submit", function( event ) {
+		     event.preventDefault();
+		     start_export();
+		 });
+
+		 export_progress_dialog = $("#export-progress").dialog({
+		     autoOpen: false,
+		     modal: true,
+		     closeOnEscape: false,
+		     open: function(event, ui) {
+			 $(this).closest('.ui-dialog').find('.ui-dialog-titlebar-close').hide()
+		     },
+		     buttons: {
+			 "Cancel Export": cancel_export,
+		     },
+		 });
+
+		 export_progress_bar = $("#export-progress-bar").progressbar({
+		     max: 100.0,
+		     value: false,
+		 });
+
+		 return [export_setup_dialog, export_progress_dialog];
+	     }
+
+	     return [make_export_dialogs, begin_export_dialog];
 	 })();
 
 	 function resize_timelines() {
@@ -3794,6 +3930,22 @@
 	     this.ctx = this.canvas.getContext("2d");
 	 }
 
+	 ExportManager.prototype.make_progress_object = function() {
+	     var last_exported_frame = parseInt(this.last_request_sent);
+	     if (isNaN(last_exported_frame)) {
+		 last_exported_frame = 0;
+	     }
+	     var last_exported_time = this.start_time + last_exported_frame / this.fps;
+	     return {
+		 last_request_sent: this.last_request_sent,
+		 progress_percent: 100 * (last_exported_time - this.start_time) / (this.end_time - this.start_time),
+		 progress_time: last_exported_time - this.start_time,
+		 total_time: this.end_time - this.start_time,
+		 progress_frames: last_exported_frame,
+		 total_frames: Math.floor((this.end_time - this.start_time) * this.fps),
+	     };
+	 }
+
 	 ExportManager.prototype.post = function(url, data) {
 	     $.ajax({
 		 type: "POST",
@@ -3805,6 +3957,7 @@
 	 }
 
 	 ExportManager.prototype.do_export = function() {
+	     this.client_status = "ok";
 	     this.server_status = "working";
 	     this.last_request_sent = "start_export";
 
@@ -3818,19 +3971,33 @@
 	     });
 	 }
 
+	 ExportManager.prototype.cancel_export = function() {
+	     console.log("Setting export client state to canceled");
+	     this.client_status = "canceled";
+	 }
+
 	 ExportManager.prototype.cleanup = function() {
 	     delete tick_callbacks["export"];
 	 }
 
 	 ExportManager.prototype.handle_server_response = function(data, status) {
 	     if (status !== "success") {
+		 console.log("Export manager finished in error state.");
 		 this.server_status = "error";
 		 this.error(data, status);
 		 this.cleanup();
 		 return;
 	     }
 
+	     if (this.last_request_sent === "cancel_export") {
+		 console.log("Export manager finished in cancel state.");
+		 this.server_status = "finished";
+		 this.cleanup();
+		 return;
+	     }
+
 	     if (this.last_request_sent === "finish_export") {
+		 console.log("Export manager finished in success state.");
 		 this.server_status = "finished";
 		 this.success(data, status);
 		 this.cleanup();
@@ -3838,7 +4005,7 @@
 	     }
 
 	     this.server_status = "ready";
-	     this.progress(this.last_request_sent);
+	     this.progress(this.make_progress_object());
 	     this.maybe_send_next_server_request();
 	 }
 	 
@@ -3850,7 +4017,9 @@
 	     // Compute the next request.
 	     var next_request = null;
 	     var draw_time = null;
-	     if (this.last_request_sent === "start_export") {
+	     if (this.client_status === "canceled") {
+		 next_request = "cancel_export";
+	     } else if (this.last_request_sent === "start_export") {
 		 next_request = 0;
 	     } else {
 		 var i = parseInt(this.last_request_sent);
@@ -3867,6 +4036,13 @@
 	     }
 	     if (next_request === null) {
 		 return;
+	     }
+
+	     // Send cancel if applicable.
+	     if (next_request === "cancel_export") {
+		 this.post("../cancel_export", {});
+		 this.last_request_sent = next_request;
+		 this.server_status = "working";
 	     }
 
 	     // Send finish if applicable.
@@ -3918,37 +4094,6 @@
 	     return this.canvas.toDataURL();
 	 }
 	 
-	 function export_video() {
-	     // Prep.
-	     if (current_action) current_action.finish();
-	     playing = false;
-	     
-	     // Invoke export mananger.
-	     var filename = "Video.avi";
-	     var fps = 60;
-	     var width = 1280;
-	     var height = 720;
-	     var start_time = 0.0;
-	     var end_time = 10.0;
-	     var success_fn = function(data, status) {
-		 console.log("Export success!");
-		 console.log(data);
-		 console.log(status);
-	     };
-	     var error_fn = function(data, status) {
-		 console.log("Export errored out!");
-		 console.log(data);
-		 console.log(status);
-	     };
-	     var progress_fn = function(request_name) {
-		 console.log("Request succeeded: " + request_name);
-	     };
-	     global_export_manager = new ExportManager(
-		 filename, fps, width, height, start_time, end_time,
-		 success_fn, error_fn, progress_fn);
-	     global_export_manager.do_export();
-	 }
-
 	 function main_keydown_handler(e) {
 	     if (e.key == "Delete") {
 		 remove_events(selection);
@@ -4037,7 +4182,7 @@
 	     $("#play").on("click", play);
 	     $("#stop").on("click", stop);
 	     $("#go").on("click", go);
-	     $("#export").on("click", export_video);
+	     $("#export_dialog_button").on("click", begin_export_dialog);
 	     $("#new_layer").on("click", new_layer);
 	     $("#new_image").on("click", begin_add_image);
 	     $("#reset_viewport").on("click", function() { viewport_matrix = getIdentityMatrix(); });
@@ -4111,6 +4256,9 @@
 	     // Set up the add image dialog
 	     make_image_dialog();
 
+	     // Set up the export video dialog
+	     make_export_dialogs();
+
 	     // Set up a resize handler to resize the timelines
 	     // TODO: this might act badly if we resize the window while we are
 	     // moving layers around.
@@ -4125,9 +4273,7 @@
 	<div id="rename-layer" title="Rename Layer">
 	    <form>
 		<fieldset>
-		    <input type="text" name="name" id="layer-rename-name" value="Layer Name" class="text ui-widget-content ui-corner-all">
-		    <!-- Allow form submission with keyboard without duplicating the dialog button -->
-		    <input type="submit" tabindex="-1" style="position:absolute; top:-1000px">
+		    <input type="text" id="layer-rename-name" value="Layer Name" class="text ui-widget-content ui-corner-all">
 		</fieldset>
 	    </form>
 	</div>
@@ -4136,10 +4282,27 @@
 	    <form>
 		<fieldset>
 		    <input type="file" id="add-image-file" value="Image File" class="text ui-widget-content ui-corner-all" />
-		    <!-- Allow form submission with keyboard without duplicating the dialog button -->
-		    <input type="submit" tabindex="-1" style="position:absolute; top:-1000px">
 		</fieldset>
 	    </form>
+	</div>
+
+	<div id="export-setup" title="Export Video">
+	    <form>
+		<fieldset>
+		    Filename: <input type="text" id="export-filename" value="Video.avi" class="text ui-widget-content ui-corner-all" /><br/>
+		    FPS: <input type="text" id="export-fps" value="60" class="text ui-widget-content ui-corner-all"/><br/>
+		    Start time: <input type="text" id="export-start-time" value="0" class="text ui-widget-content ui-corner-all"/><br/>
+		    End time: <input type="text" id="export-end-time" value="10" class="text ui-widget-content ui-corner-all"/><br/>
+		</fieldset>
+	    </form>
+	</div>
+
+	<div id="export-progress" title="Export Progress">
+	    <div id="export-progress-percent"></div>
+	    <div id="export-progress-time"></div>
+	    <div id="export-progress-frames"></div>
+	    <br/>
+	    <div id="export-progress-bar"></div>
 	</div>
 
 	<p>Layers
@@ -4154,7 +4317,7 @@
 	    <button type="button" id="go">Go</button>
 	    <button type="button" id="play">Play</button>
 	    <button type="button" id="stop">Stop</button>
-	    <button type="button" id="export">Export</button>
+	    <button type="button" id="export_dialog_button">Export</button>
 	</p>
 	<p id="tool_set"></p>
 	<p><input id="transform_events_checkbox" type="checkbox">Apply transformations to individual events</p>

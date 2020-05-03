@@ -171,3 +171,7 @@
 ** TODO Hide/show additional tool options (stroke color & size, font options, table options, apply transforms to events checkbox, etc) as appropriate based on what tool is selected.
 * Sound Recording
 ** TODO Figure out HOW
+* Video Exporting
+** TODO Figure out colour vibrancy issue (exported videos have less vibrant colours than the in-browser view)
+** TODO Figure out why exported videos won't play except in VLC
+** TODO Figure out why exporting is so slow and try to speed it up
