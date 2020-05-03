@@ -267,7 +267,7 @@
 	     // First find the state before
 	     var visible_before = true; // default if we can't find any events
 	     var index = start_bucket;
-	     while (index > 0) {
+	     while (index >= 0) {
 		 if (index in this.layer.visibility_buckets) {
 		     var latest_event = null;
 		     for (var event of this.layer.visibility_buckets[index]) {
