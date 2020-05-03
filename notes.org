@@ -188,3 +188,4 @@
 ** TODO Figure out why exported videos won't play except in VLC
 ** TODO Figure out why exporting is so slow and try to speed it up
 *** Especially when there are large images involved
+** TODO Fix bug where hidden layers still show up in exported video.

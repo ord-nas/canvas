@@ -3320,8 +3320,32 @@
 	     var export_progress_dialog = null;
 	     var export_progress_bar = null;
 	     var export_manager = null;
+	     var last_calculated_end = null;
 
 	     function begin_export_dialog() {
+		 // Infer the endpoint as 0.5 seconds after the end of the last event.
+		 // TODO does this need to be faster?
+		 var end = 0.0;
+		 for (var layer of layers) {
+		     for (var event_list of [layer.strokes,
+					     layer.transforms,
+					     layer.visibility_events]) {
+			 for (var event of event_list) {
+			     end = Math.max(end, event.end() / 1000.0);
+			 }
+		     }
+		 }
+		 end += 0.5;
+
+		 // We want to do inference if this is the first time we export or
+		 // if the endpoint has changed since the last time, but otherwise
+		 // we just want to persist the previous settings.
+		 if (end !== last_calculated_end) {
+		     $("#export-start-time").val("0.00");
+		     $("#export-end-time").val(end.toFixed(2));
+		     last_calculated_end = end;
+		 }
+
 		 export_setup_dialog.dialog("open");
 	     }
 
