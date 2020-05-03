@@ -11,7 +11,16 @@ class ExportManager(object):
     def __init__(self, export_dir):
         self.export_dir = export_dir
         self.video_writer = None
+    def avoid_filename_conflicts(self, initial_filename):
+        (root, ext) = os.path.splitext(initial_filename)
+        adjusted_root = root
+        version = 0
+        while os.path.exists(os.path.join(self.export_dir, adjusted_root + ext)):
+            version += 1
+            adjusted_root = root + " " + str(version)
+        return adjusted_root + ext
     def start_export(self, filename, fps, frame_width, frame_height):
+        filename = self.avoid_filename_conflicts(filename)
         try:
             if self.video_writer is not None:
                 self.video_writer.release()
