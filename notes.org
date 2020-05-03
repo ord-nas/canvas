@@ -187,3 +187,4 @@
 ** TODO Figure out colour vibrancy issue (exported videos have less vibrant colours than the in-browser view)
 ** TODO Figure out why exported videos won't play except in VLC
 ** TODO Figure out why exporting is so slow and try to speed it up
+*** Especially when there are large images involved
