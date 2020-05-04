@@ -2438,8 +2438,8 @@
 	 TransformLayerSink.prototype.finalize = function() {
 	     if (this.active_transform !== null) {
 		 this.active_layer.finalize_event(this.active_transform);
-		 this.active_layer.redraw_on_transform_change = true;
 	     }
+	     this.active_layer.redraw_on_transform_change = true;
 	 }
 
 	 TransformLayerSink.prototype.process = function(matrix) {
