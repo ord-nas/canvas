@@ -1,0 +1,83 @@
+	 #viewport-overlay {
+	     position:absolute;
+	     left:0px;
+	     top:0px;
+	 }
+	 #viewport-overlay.altered_viewport {
+	     top: -5px;
+	     left: -5px;
+	     border-style: solid;
+	     border-color: red;
+	     border-width: 5px;
+	 }
+	 .strikethrough {
+	     text-decoration: line-through;
+	 }
+	 .placeholder {
+	     outline: 1px dashed #4183C4;
+	 }
+	 .mjs-nestedSortable-error {
+	     background: #fbe3e4;
+	     border-color: transparent;
+	 }
+	 ol {
+	     padding-left: 25px;
+	 }
+	 ol.sortable,ol.sortable ol {
+	     list-style-type: none;
+	 }
+	 li.mjs-nestedSortable-collapsed.mjs-nestedSortable-hovering div {
+	     border-color: #999;
+	 }
+	 .sortable li.mjs-nestedSortable-collapsed > ol {
+	     display: none;
+	 }
+	 .sortable li.mjs-nestedSortable-branch > div > .disclose {
+	     display: inline-block;
+	 }
+	 .sortable span.ui-icon {
+	     display: inline-block;
+	     margin: 0;
+	     padding: 0;
+	 }
+	 .layerhandle-contents {
+	     border: 1px solid #d4d4d4;
+	     -webkit-border-radius: 3px;
+	     -moz-border-radius: 3px;
+	     border-radius: 3px;
+	     cursor: move;
+	     border-color: #D4D4D4 #D4D4D4 #BCBCBC;
+	     margin: 0;
+	     padding: 3px;
+	     background: #EBEBEB;
+	 }
+	 .layerhandle-contents.image-layer {
+	     background: #ce9fc0;
+	 }
+	 .layerhandle-contents canvas {
+	     cursor: default;
+	 }
+	 .layer-title {
+	     vertical-align: middle;
+	 }
+	 #rename-layer label, #rename-layer input { display:block; }
+	 #rename-layer input.text { margin-bottom:0px; width:95%; padding: .4em; }
+	 #rename-layer fieldset { padding:0; border:0; margin-top:10px; }
+	 #add-image label, #add-image input { display:block; }
+	 #add-image input.text { margin-bottom:0px; width:95%; padding: .4em; }
+	 #add-image fieldset { padding:0; border:0; margin-top:10px; }
+	 #export-setup label, #export-setup input { display:block; }
+	 #export-setup input.text { margin-bottom:0px; width:95%; padding: .4em; }
+	 #export-setup fieldset { padding:0; border:0; margin-top:10px; }
+	 #export-progress label { display:block; }
+	 #export-progress-percent { font-weight: bold; }
+
+	 html * {
+	     -webkit-touch-callout: none; /* iOS Safari */
+	     -webkit-user-select: none; /* Safari */
+	     -khtml-user-select: none; /* Konqueror HTML */
+	     -moz-user-select: none; /* Firefox */
+	     -ms-user-select: none; /* Internet Explorer/Edge */
+	     user-select: none; /* Non-prefixed version, currently
+                                   supported by Chrome and Opera */
+	 }
