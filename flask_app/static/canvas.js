@@ -3135,24 +3135,30 @@ var current_layer = null;
     var rename_dialog = null;
     var current_rename_layer = null;
     function begin_rename_layer(layer) {
+        $("#rename-error-message").css("visibility", "hidden");
         current_rename_layer = layer;
         $("#layer-rename-name").val(layer.title);
         rename_dialog.dialog("open");
     }
-    function end_rename_layer() {
-        current_rename_layer.title = $("#layer-rename-name").val();
-        rename_dialog.dialog("close");
-        update_layers();
+    function maybe_end_rename_layer() {
+        var name = $("#layer-rename-name").val();
+        if (layer_name_taken(name) && current_rename_layer.title !== name) {
+            $("#rename-error-message").css("visibility", "visible");
+        } else {
+            current_rename_layer.title = name;
+            rename_dialog.dialog("close");
+            update_layers();
+        }
     }
 
     function make_rename_dialog() {
         rename_dialog = $( "#rename-layer" ).dialog({
             autoOpen: false,
-            height: 200,
-            width: 350,
+            height: 230,
+            width: 500,
             modal: true,
             buttons: {
-                "Ok": end_rename_layer,
+                "Ok": maybe_end_rename_layer,
                 "Cancel": function() {
                     rename_dialog.dialog( "close" );
                 }
@@ -3682,7 +3688,19 @@ function update_layers() {
     }
 }
 
+function layer_name_taken(name) {
+    for (var layer of layers) {
+        if (layer.title === name) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function new_layer(event, image_data_url = null) {
+    while (layer_name_taken("Layer " + next_layer_key)) {
+        next_layer_key++;
+    }
     layers.push(new Layer("Layer " + next_layer_key, next_layer_key, image_data_url));
     next_layer_key++;
     update_layers();
