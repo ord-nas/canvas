@@ -6,6 +6,7 @@ from flask import Flask, request
 app = Flask(__name__,
             static_url_path='/static/',
             static_folder='static')
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 class ExportManager(object):
     def __init__(self, export_dir):
