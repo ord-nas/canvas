@@ -113,7 +113,10 @@
 *** Maybe give layers a getCurrentTransform method?
 *** Maybe also make transformPeriod operate on matrix instead of context, so that we can perform this calculation on a matrix only instead of needing to temporarily mutate the context.
 ** TODO Remove all hard-coded references to height and width
-** TODO Make derived classes properly call their parent constructors
+** DONE Make derived classes properly call their parent constructors
+** TODO SVGMatrix is deprecated, replace with DOMMatrix
+** TODO Replace all fatal console.log messages with real errors (i.e. throw)
+** TODO Clean up function/variable/class naming conventions
 * Bugs
 ** TODO Brush stroke width (and shape!) is affected by current transform
 *** Solution:
@@ -189,3 +192,13 @@
 ** TODO Figure out why exporting is so slow and try to speed it up
 *** Especially when there are large images involved
 ** DONE Fix bug where hidden layers still show up in exported video.
+* Save/Load
+** TODO Implement basic functionality to serialize/deserialize to/from JSON
+*** TODO Add a writeup about this, since it's non-trivial
+*** TODO Start documentation for JSON format versioning
+** TODO Move all global state to a single place
+** TODO Implement functionality to stash/restore full global state
+** TODO Implement "Save"
+** TODO Implement "Save As"
+** TODO Implement "Open"
+** TODO Implement "New"

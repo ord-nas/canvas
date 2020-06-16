@@ -90,21 +90,121 @@ function fake_event_like(event, start, end) {
     return e;
 }
 
+// Utilities for serialization/deserialization.
+
+function serialize_matrix(m) {
+    return {
+        a: m.a,
+        b: m.b,
+        c: m.c,
+        d: m.d,
+        e: m.e,
+        f: m.f,
+    };
+}
+
+function deserialize_matrix(data) {
+    var m = getIdentityMatrix();
+    m.a = data.a;
+    m.b = data.b;
+    m.c = data.c;
+    m.d = data.d;
+    m.e = data.e;
+    m.f = data.f;
+    return m;
+}
+
+function makeJSONEncoder(special_arg_dict) {
+    return function(unused = null, current_class = null) {
+        // Try calling super. First find the current class if it's unset.
+        if (current_class === null) {
+            current_class = this.__proto__;
+            while (current_class !== null) {
+                if (current_class.hasOwnProperty("toJSON")) {
+                    break;
+                } else {
+                    current_class = current_class.__proto__;
+                }
+            }
+            if (current_class === null) {
+                throw "Internal error, had trouble walking prototype chain.";
+            }
+        }
+
+        // Now walk up the chain of parents until we find one that actually defines toJSON.
+        var parent = current_class.__proto__;
+        while (parent !== null) {
+            if (parent.hasOwnProperty("toJSON")) {
+                break;
+            } else {
+                parent = parent.__proto__;
+            }
+        }
+
+        // If we actually find one, call its toJSON.
+        var obj_to_serialize = (parent === null ? this : parent.toJSON.call(this, unused, parent));
+
+        // Now construct the serialized object.
+        console.log("Called toJSON on " + current_class.constructor.name);
+        var class_name = this.constructor.name;
+        var serialize = {
+            class_name_for_deserialization: class_name,
+        };
+        for (var name of Object.getOwnPropertyNames(obj_to_serialize)) {
+            if (name === "class_name_for_deserialization") {
+                continue;
+            }
+            if (!this.expected_properties.has(name)) {
+                throw class_name + ' has unexpected property: ' + name;
+            }
+            if (name in special_arg_dict) {
+                if (special_arg_dict[name] === null) {
+                    continue;
+                } else {
+                    serialize[name] = special_arg_dict[name](obj_to_serialize[name], obj_to_serialize);
+                }
+            } else {
+                serialize[name] = obj_to_serialize[name];
+            }
+        }
+        return serialize;
+    }
+}
+
+function makeJSONReviver(callback_vector) {
+    return function(key, value) {
+        if (typeof value === "object" && "class_name_for_deserialization" in value) {
+            var class_name = value.class_name_for_deserialization;
+            delete value.class_name_for_deserialization;
+
+            var constructor = window[class_name];
+            var prototype = window[class_name].prototype;
+            var obj = Object.create(prototype);
+            for (var name of Object.getOwnPropertyNames(value)) {
+                if (!prototype.expected_properties.has(name)) {
+                    throw class_name + ' has unexpected property: ' + name;
+                }
+                obj[name] = value[name];
+            }
+
+            if ("reifyFromJSON" in prototype) {
+                callback_vector.push(
+                    () => (obj.reifyFromJSON())
+                );
+            }
+
+            return obj;
+        } else {
+            return value;
+        }
+    }
+}
+
 // START TIMELINE DEFINITION
 
 function Timeline(layer) {
-    var jCanvas = $('<canvas height="30px" width="1000px"></canvas>');
     this.id = "timeline-" + layer.id;
     this.layer = layer;
-    jCanvas.attr('id', this.id);
-    this.canvas = jCanvas.get(0);
-    this.ctx = this.canvas.getContext("2d");
-    jCanvas.on("wheel", this.scroll.bind(this));
-    jCanvas.on("mousedown", this.mousedown.bind(this));
-    jCanvas.on("dblclick", this.dblclick.bind(this));
-    jCanvas.on("contextmenu", function(event) {
-        event.preventDefault();
-    });
 
     this.max_rank = 0;
     this.y_offset = 0;
@@ -112,6 +212,8 @@ function Timeline(layer) {
 
     this.window_preview_start = null;
     this.window_preview_end = null;
+
+    this.makeCanvasAndCtx();
 }
 
 // Shared timeline stuff
@@ -132,6 +234,51 @@ Timeline.scale_preview_factor = null;
 Timeline.scale_preview_anchor = null;
 Timeline.scale_preview_stretch = null;
 Timeline.min_scale_amount = 0.01;
+
+Timeline.prototype.expected_properties = new Set([
+    "id", "layer", "max_rank", "y_offset", "needs_redraw", "window_preview_start", "window_preview_end", "canvas", "ctx",
+]);
+
+Timeline.prototype.toJSON = makeJSONEncoder({
+    // Properties to discard (need to be created fresh after deserialize).
+    canvas: null,
+    ctx: null,
+    // Properties to discard (need to be reset after deserialize).
+    y_offset: null,
+    needs_redraw: null,
+    window_preview_start: null,
+    window_preview_end: null,
+    // Properties to transform to a wire-safe format (need to be converted back after deserialize).
+    layer: (layer => layer.id),
+});
+
+
+Timeline.prototype.reifyFromJSON = function() {
+    // Map these properties back to their proper format.
+    this.layer = get_layer_by_id(this.layer);
+
+    // Fill in some properties that should be reset.
+    this.y_offset = 0;
+    this.needs_redraw = true;
+    this.window_preview_start = null;
+    this.window_preview_end = null;
+
+    // Rebuild some properties that need to be created fresh.
+    this.makeCanvasAndCtx();
+}
+
+Timeline.prototype.makeCanvasAndCtx = function() {
+    var jCanvas = $('<canvas height="30px" width="1000px"></canvas>');
+    jCanvas.attr('id', this.id);
+    this.canvas = jCanvas.get(0);
+    this.ctx = this.canvas.getContext("2d");
+    jCanvas.on("wheel", this.scroll.bind(this));
+    jCanvas.on("mousedown", this.mousedown.bind(this));
+    jCanvas.on("dblclick", this.dblclick.bind(this));
+    jCanvas.on("contextmenu", function(event) {
+        event.preventDefault();
+    });
+}
 
 Timeline.prototype.get_max_y_offset = function() {
     return Math.max(0, (this.max_rank + 1) * Timeline.spacing - this.canvas.height);
@@ -411,7 +558,7 @@ Timeline.prototype.scroll = function(event) {
 Timeline.prototype.assign_rank = function(event) {
     var taken = [];
     for (var e of this.events_in_time_range(event.begin(), event.end())) {
-        if (e.rank !== undefined) {
+        if (e.rank !== null) {
             taken[e.rank] = true;
         }
     }
@@ -867,7 +1014,7 @@ Timeline.prototype.dblclick = function(event) {
 
 Timeline.prototype.recompute_max_rank = function() {
     var accumulate_max_rank = function(acc, value) {
-        if (value.rank !== undefined && value.rank > acc) {
+        if (value.rank !== null && value.rank > acc) {
             return value.rank;
         }
         return acc;
@@ -882,19 +1029,14 @@ Timeline.prototype.recompute_max_rank = function() {
 // START LAYER DEFINITION
 
 function Layer(title, id, background_image_url = null) {
-    var jCanvas = $('<canvas height="720px" width="1280px" style="position:absolute;left:0px;top:0px"></canvas>');
     this.id = "layer-" + id;
-    jCanvas.attr('id', this.id);
-    $("#layer_set").append(jCanvas);
-    this.canvas = jCanvas.get(0);
     this.title = title;
     this.handle_id = "layerhandle_" + id;
-    this.ctx = this.canvas.getContext("2d");
-    addMatrixTrackingToContext(this.ctx);
     this.matrices = [getIdentityMatrix()];
     this.visibilities = [true];
     this.child_index = null;
     this.ancestors = [this];
+    this.children = [];
 
     this.timeline = new Timeline(this);
 
@@ -902,7 +1044,6 @@ function Layer(title, id, background_image_url = null) {
     this.last_transform = null;
     this.last_visibility_check = null;
     this.redraw_on_transform_change = true;
-    this.temp_canvas = null;
 
     this.stroke_buckets = {};
     this.strokes = [];
@@ -920,6 +1061,87 @@ function Layer(title, id, background_image_url = null) {
     }
 
     this.last_viewport_matrix = getIdentityMatrix();
+
+    this.makeCanvasAndCtx();
+}
+
+Layer.prototype.expected_properties = new Set([
+    "id", "canvas", "title", "handle_id", "ctx", "matrices", "visibilities", "child_index", "ancestors", "children", "timeline", "last_draw",
+    "last_transform", "last_visibility_check", "redraw_on_transform_change", "temp_canvas", "stroke_buckets", "strokes", "transform_buckets",
+    "transforms", "visibility_buckets", "visibility_events", "parent", "background_image", "last_viewport_matrix",
+]);
+
+Layer.prototype.toJSON = makeJSONEncoder({
+    // Properties to discard (need to be created fresh after deserialize).
+    canvas: null,
+    ctx: null,
+    temp_canvas: null,
+    stroke_buckets: null,
+    transform_buckets: null,
+    visibility_buckets: null,
+    // Properties to discard (need to be reset after deserialize).
+    last_viewport_matrix: null,
+    last_draw: null,
+    last_transform: null,
+    last_visibility_check: null,
+    redraw_on_transform_change: null,
+    // Properties to transform to a wire-safe format (need to be converted back after deserialize).
+    matrices: (m => m.map(serialize_matrix)),
+    background_image: (image => image === null ? null : image.src),
+    ancestors: (a => a.map(layer => layer.id)),
+    children: (c => c.map(layer => layer.id)),
+    parent: (p => p === null ? null : p.id),
+});
+
+Layer.prototype.reifyFromJSON = function() {
+    // Map these properties back to their proper format.
+    this.matrices = this.matrices.map(deserialize_matrix);
+    if (this.background_image !== null) {
+        var src = this.background_image;
+        this.background_image = new Image;
+        this.background_image.src = src;
+    }
+    this.ancestors = this.ancestors.map(get_layer_by_id);
+    this.children = this.children.map(get_layer_by_id);
+    if (this.parent !== null) {
+        this.parent = get_layer_by_id(this.parent);
+    }
+
+    // Fill in some properties that should be reset.
+    this.last_viewport_matrix = getIdentityMatrix();
+    this.last_draw = null;
+    this.last_transform = null;
+    this.last_visibility_check = null;
+    this.redraw_on_transform_change = true;
+
+    // Rebuild some properties that need to be created fresh.
+    this.buildBuckets();
+    this.makeCanvasAndCtx();
+}
+
+Layer.prototype.makeCanvasAndCtx = function() {
+    var jCanvas = $('<canvas height="720px" width="1280px" style="position:absolute;left:0px;top:0px"></canvas>');
+    jCanvas.attr('id', this.id);
+    $("#layer_set").append(jCanvas);
+    this.canvas = jCanvas.get(0);
+    this.ctx = this.canvas.getContext("2d");
+    addMatrixTrackingToContext(this.ctx);
+    this.temp_canvas = null;
+}
+
+Layer.prototype.buildBuckets = function() {
+    this.stroke_buckets = {};
+    for (var stroke of this.strokes) {
+        addToAllRelevantBuckets(stroke, this.stroke_buckets);
+    }
+    this.transform_buckets = {};
+    for (var transform of this.transforms) {
+        addToAllRelevantBuckets(transform, this.transform_buckets);
+    }
+    this.visibility_buckets = {};
+    for (var visibility_event of this.visibility_events) {
+        addToAllRelevantBuckets(visibility_event, this.visibility_buckets);
+    }
 }
 
 Layer.prototype.resetTransform = function() {
@@ -1032,7 +1254,7 @@ function add_event_impl(event, buckets, arr) {
     for (var bucket = start_bucket; bucket <= end_bucket; bucket++) {
         addToBucket(buckets, bucket, event);
     }
-    event.rank = undefined;
+    event.rank = null;
     event.layer.finalize_event(event);
 }
 
@@ -1064,6 +1286,14 @@ function addToBucket(buckets, index, item) {
         buckets[index] = [];
     }
     buckets[index].push(item);
+}
+
+function addToAllRelevantBuckets(event, buckets) {
+    var start_bucket = Math.floor(event.begin() / bucket_size);
+    var end_bucket = Math.floor(event.end() / bucket_size);
+    for (var bucket = start_bucket; bucket <= end_bucket; bucket++) {
+        addToBucket(buckets, bucket, event);
+    }
 }
 
 function getMousePos(evt, canvas) {
@@ -1723,6 +1953,21 @@ function Stroke(start, colour, width, layer) {
     this.width = width;
     this.pnts = [];
     this.layer = layer;
+    this.rank = null;
+}
+
+Stroke.prototype.expected_properties = new Set([
+    "start", "colour", "width", "pnts", "layer", "rank",
+]);
+
+Stroke.prototype.toJSON = makeJSONEncoder({
+    // Properties to transform to a wire-safe format (need to be converted back after deserialize).
+    layer: (layer => layer.id),
+});
+
+Stroke.prototype.reifyFromJSON = function() {
+    // Map these properties back to their proper format.
+    this.layer = get_layer_by_id(this.layer);
 }
 
 Stroke.prototype.push_events_into = function(arr) {
@@ -1781,7 +2026,7 @@ Stroke.prototype.reverse = function() {
 // Line
 
 function Line(start_pnt, end_pnt, start_time, end_time, colour, width, layer) {
-    this.start = start_time;
+    Stroke.call(this, start_time, colour, width, layer);
     this.pnts = [{x: start_pnt.x,
                   y: start_pnt.y,
                   time: 0,
@@ -1790,9 +2035,6 @@ function Line(start_pnt, end_pnt, start_time, end_time, colour, width, layer) {
                   y: end_pnt.y,
                   time: end_time - start_time,
                   seq_id: end_pnt.seq_id}];
-    this.colour = colour;
-    this.width = width;
-    this.layer = layer;
 }
 Line.prototype = Object.create(Stroke.prototype);
 Line.prototype.constructor = Line;
@@ -1827,7 +2069,7 @@ Line.prototype.push_events_into = function(arr) {
 // Ellipse
 
 function Ellipse(centre, x_axis, y_axis, hradius, vradius, start_time, end_time, colour, width, layer) {
-    this.start = start_time;
+    Stroke.call(this, start_time, colour, width, layer);
     this.pnts = [{x: centre.x,
                   y: centre.y,
                   time: 0,
@@ -1842,12 +2084,13 @@ function Ellipse(centre, x_axis, y_axis, hradius, vradius, start_time, end_time,
                   seq_id: y_axis.seq_id}];
     this.hradius = hradius;
     this.vradius = vradius;
-    this.colour = colour;
-    this.width = width;
-    this.layer = layer;
 }
 Ellipse.prototype = Object.create(Stroke.prototype);
 Ellipse.prototype.constructor = Ellipse;
+
+Ellipse.prototype.expected_properties = new Set([
+    "start", "colour", "width", "pnts", "layer", "rank", "hradius", "vradius",
+]);
 
 Ellipse.prototype.push_events_into = function(arr) {
     var num_divisions = 50; // arbitrary
@@ -1875,9 +2118,8 @@ Ellipse.prototype.push_events_into = function(arr) {
 
 // ObjectCollection
 
-function ObjectCollection(start_time, layer) {
-    this.start = start_time;
-    this.layer = layer;
+function ObjectCollection(start_time, color, width, layer) {
+    Stroke.call(this, start_time, color, width, layer);
     this.reversed = false;
 
     this.cached_objs = [];
@@ -1887,6 +2129,27 @@ function ObjectCollection(start_time, layer) {
 }
 ObjectCollection.prototype = Object.create(Stroke.prototype);
 ObjectCollection.prototype.constructor = ObjectCollection;
+
+ObjectCollection.prototype.expected_properties = new Set([
+    "start", "colour", "width", "pnts", "layer", "rank", "reversed", "cached_objs", "cached_start", "cached_pnts", "cached_reversed",
+]);
+
+ObjectCollection.prototype.toJSON = makeJSONEncoder({
+    // Properties to discard (need to be reset after deserialize).
+    cached_objs: null,
+    cached_start: null,
+    cached_pnts: null,
+    cached_reversed: null,
+});
+
+ObjectCollection.prototype.reifyFromJSON = function() {
+    Stroke.prototype.reifyFromJSON.call(this);
+    // Recreate some properties.
+    this.cached_objs = [];
+    this.cached_start = null;
+    this.cached_pnts = [];
+    this.cached_reversed = false;
+}
 
 ObjectCollection.prototype.cache_is_fresh = function() {
     var fields = ["x", "y", "time", "seq_id"];
@@ -1941,7 +2204,7 @@ ObjectCollection.prototype.reverse = function() {
 // Rectangle
 
 function Rectangle(top_left, bottom_right, start_time, end_time, colour, width, layer) {
-    ObjectCollection.call(this, start_time, layer);
+    ObjectCollection.call(this, start_time, colour, width, layer);
     this.pnts = [{x: top_left.x,
                   y: top_left.y,
                   time: 0,
@@ -1954,8 +2217,6 @@ function Rectangle(top_left, bottom_right, start_time, end_time, colour, width, 
                   y: bottom_right.y,
                   time: end_time - start_time,
                   seq_id: bottom_right.seq_id}];
-    this.colour = colour;
-    this.width = width;
 }
 Rectangle.prototype = Object.create(ObjectCollection.prototype);
 Rectangle.prototype.constructor = Rectangle;
@@ -1982,14 +2243,17 @@ function Polygon(pnts, start_time, colour, width, layer, smooth_time=true) {
         console.log("ERROR: tried to construct polygon with not enough points");
         console.log(pnts);
     }
-    ObjectCollection.call(this, start_time, layer);
+    ObjectCollection.call(this, start_time, colour, width, layer);
     this.pnts = pnts;
-    this.colour = colour;
-    this.width = width;
     this.smooth_time = smooth_time;
 }
 Polygon.prototype = Object.create(ObjectCollection.prototype);
 Polygon.prototype.constructor = Polygon;
+
+Polygon.prototype.expected_properties = new Set([
+    "start", "colour", "width", "pnts", "layer", "rank", "reversed", "cached_objs", "cached_start", "cached_pnts", "cached_reversed",
+    "smooth_time",
+]);
 
 Polygon.prototype.create_objs = function() {
     var partial_len_sums = [0];
@@ -2021,7 +2285,7 @@ Polygon.prototype.create_objs = function() {
 // Table
 
 function Table(top_left, bottom_right, start_time, end_time, rows, cols, colour, width, layer) {
-    ObjectCollection.call(this, start_time, layer);
+    ObjectCollection.call(this, start_time, colour, width, layer);
     this.pnts = [{x: top_left.x,
                   y: top_left.y,
                   time: 0,
@@ -2036,11 +2300,14 @@ function Table(top_left, bottom_right, start_time, end_time, rows, cols, colour,
                   seq_id: bottom_right.seq_id}];
     this.rows = rows;
     this.cols = cols;
-    this.colour = colour;
-    this.width = width;
 }
 Table.prototype = Object.create(ObjectCollection.prototype);
 Table.prototype.constructor = Table;
+
+Table.prototype.expected_properties = new Set([
+    "start", "colour", "width", "pnts", "layer", "rank", "reversed", "cached_objs", "cached_start", "cached_pnts", "cached_reversed",
+    "rows", "cols",
+]);
 
 Table.prototype.create_objs = function() {
     var x_len = distance(this.pnts[0], this.pnts[1]);
@@ -2083,6 +2350,7 @@ function Text(letters, centre, x_axis, y_axis, start_time, colour, font, valign,
     if (letters.length < 1) {
         console.log("ERROR: tried to construct text with not enough letters");
     }
+    Stroke.call(this, start_time, colour, /*width=*/0, layer);
     this.pnts = [{x: centre.x,
                   y: centre.y,
                   time: 0,
@@ -2096,21 +2364,22 @@ function Text(letters, centre, x_axis, y_axis, start_time, colour, font, valign,
                   time: letters[letters.length-1].time,
                   seq_id: y_axis.seq_id}];
     this.letters = letters;
-    this.colour = colour;
     this.font = font;
     this.valign = valign;
     this.halign = halign;
-
-    this.start = start_time;
-    this.layer = layer;
 }
 Text.prototype = Object.create(Stroke.prototype);
 Text.prototype.constructor = Text;
-Text.prototype.measuring_canvas_singleton = $("<canvas></canvas>").get(0);
-Text.prototype.measuring_ctx_singleton = Text.prototype.measuring_canvas_singleton.getContext("2d");
+
+Text.measuring_canvas_singleton = $("<canvas></canvas>").get(0);
+Text.measuring_ctx_singleton = Text.measuring_canvas_singleton.getContext("2d");
+
+Text.prototype.expected_properties = new Set([
+    "start", "colour", "width", "pnts", "layer", "rank", "letters", "font", "valign", "halign",
+]);
 
 Text.prototype.push_events_into = function(arr) {
-    var ctx = this.measuring_ctx_singleton;
+    var ctx = Text.measuring_ctx_singleton;
 
     // Split the text into lines.
     var lines = [];
@@ -4111,6 +4380,15 @@ function main_keydown_handler(e) {
         reverse_events(selection);
         add_events(selection);
     }
+}
+
+function get_layer_by_id(id) {
+    for (var layer of layers) {
+        if (layer.id === id) {
+            return layer;
+        }
+    }
+    throw "Layer not found: " + id;
 }
 
 $(document).ready(function () {
