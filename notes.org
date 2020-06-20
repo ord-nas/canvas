@@ -67,6 +67,12 @@
 *** DONE Alignment selection
 *** TODO Add tool to smooth out typing (i.e. distribute letters evenly)
 *** TODO Implement splitting for text
+** TODO Scaling transforms that only move points, not adjust the actual canvas transform
+*** Idea is that we can do, e.g. a horizontal stretch that doesn't distort the line widths but just spaces everything out more
+*** Useful for the "zooming into number line with grid marks" use-case
+*** We can already do these kinds of transforms with the "Apply transformations to individual events" checkbox, but there is no way to "record" them (they just mutate the underlying event for all of time)
+*** Idea would be to apply same transform, but to a whole layer, and as a recordable event
+*** Would probably mean layers need to keep around two kinds of transforms: first, one that transforms all the stroke points into some new coordinate system, and then second, one that transforms the actual canvas coordinate system (like what currently exists)
 ** TODO Framework idea:
 *** Each of the actual drawings inherits from Stroke
 *** The drawings all have a pnts array and all their drawing is based off that
@@ -77,6 +83,7 @@
 ** DONE Figure out HOW!
 *** Synchronized scrollbar reference: http://jsfiddle.net/kunknown/VVaEq/2/
 ** TODO Add time markings
+** TODO Add optional snap to time markings
 ** TODO Figure out how to handle vertical scrolling
 ** Editing tools
 *** TODO Copy/paste
@@ -179,6 +186,13 @@
 **** TODO Need some kind of ordering ability, since you want it to be on top of most layers, but underneath the layer you are drawing onto ... maybe they are always "just under" the currently selected layer?
 ***** This isn't ideal, since the current layer may already have stuff on it, and ideally you'd like it to be above the current stuff, but under the stuff you add when you trace over it ... hmm
 **** TODO Need to have some UI for transforming them ... possibly handle this like selected-stroke-event transforms?
+** TODO Grid lines
+*** Overlay some grid.
+*** "Grid" can also just be arbitrary horizontal and vertical reference lines.
+*** Grid is fixed across time and across layers, but can be changed/hidden/removed by user at any point.
+*** Add options to a bunch of the tools to snap to the grid.
+**** E.g. drawing tools snap to grid lines or lattice points.
+**** E.g. transformations can tell when you start near a line or lattice point and snap to the same offset on other lines or lattice points. Maybe this only applies to "smooth" transformations, where begin and end are the only thing that matter.
 * UI Ideas
 ** TODO Move all tools to right side of canvas
 ** TODO Instead of having a small radio button beside each tool, enclose the full tool name in a button (similar to text alignment UI).
