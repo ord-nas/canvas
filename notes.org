@@ -207,11 +207,11 @@
 *** Especially when there are large images involved
 ** DONE Fix bug where hidden layers still show up in exported video.
 * Save/Load
-** TODO Implement basic functionality to serialize/deserialize to/from JSON
+** DONE Implement basic functionality to serialize/deserialize to/from JSON
 *** TODO Add a writeup about this, since it's non-trivial
 *** TODO Start documentation for JSON format versioning
-** TODO Move all global state to a single place
-** TODO Implement functionality to stash/restore full global state
+** DONE Move all global state to a single place
+** DONE Implement functionality to stash/restore full global state
 ** TODO Implement "Save"
 ** TODO Implement "Save As"
 ** TODO Implement "Open"

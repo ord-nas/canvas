@@ -9,7 +9,13 @@ function getSVGElement() {
     return svg_element;
 }
 
+// Constants.
 var bucket_size = 1000 * 5;
+var always_clear = false;
+var always_reset_transform = false;
+
+// Globals.
+
 var playing = false;
 var last_project_time = 0;
 var last_real_time = 0;
@@ -19,8 +25,80 @@ var selection = [];
 var global_mouse_action = null;
 var last_tick = null;
 var viewport_matrix = getIdentityMatrix();
-var last_viewport_matrix = getIdentityMatrix();
+var last_viewport_matrix = null;
 var tick_callbacks = {};
+var layers = [];
+var next_layer_key = 1;
+var current_layer = null;
+var current_action = null;
+
+function resetGlobals() {
+    playing = false;
+    last_project_time = 0;
+    last_real_time = 0;
+    current_project_time = 0;
+    current_seq_id = 0;
+    selection = [];
+    global_mouse_action = null;
+    last_tick = null;
+    viewport_matrix = getIdentityMatrix();
+    last_viewport_matrix = null;
+    tick_callbacks = {};
+    layers = [];
+    next_layer_key = 1;
+    current_layer = null;
+    current_action = null;
+}
+
+function resetState() {
+    // Clean up any ongoing action.
+    if (current_action) current_action.finish();
+
+    // Reset all global variables.
+    resetGlobals();
+
+    // Call update_layers to delete layer artifacts from the DOM.
+    update_layers();
+
+    // Reset displayed project time.
+    $("#time").val(current_project_time / 1000);
+}
+
+function serializeState() {
+    // Package up all the global state we need.
+    var state = {
+        version: "0",
+        layers: layers,
+        current_seq_id: current_seq_id,
+        next_layer_key: next_layer_key,
+    };
+
+    // Serialize it.
+    return JSON.stringify(state);
+}
+
+function deserializeState(state) {
+    // Reset everything.
+    resetState();
+
+    // Run JSON parser.
+    var cbs = [];
+    var reviver = makeJSONReviver(cbs);
+    var deserialized = JSON.parse(state, reviver);
+
+    // Install deserialized globals.
+    layers = deserialized.layers;
+    current_seq_id = deserialized.current_seq_id;
+    next_layer_key = deserialized.next_layer_key;
+
+    // Run reviver callbacks.
+    for (var cb of cbs) {
+        cb();
+    }
+
+    // Run update_layers to update DOM.
+    update_layers();
+}
 
 var matrixMaker = {
     translation: function(x, y) {
@@ -114,6 +192,9 @@ function deserialize_matrix(data) {
     return m;
 }
 
+// TODO: Consider making this take a second arg, which is the super method to invoke (if any).
+// That way, we don't have to do as much munging inside the returned function.
+// Also, we stop relying on the fact that this method is used to set the toJSON property.
 function makeJSONEncoder(special_arg_dict) {
     return function(unused = null, current_class = null) {
         // Try calling super. First find the current class if it's unset.
@@ -173,7 +254,7 @@ function makeJSONEncoder(special_arg_dict) {
 
 function makeJSONReviver(callback_vector) {
     return function(key, value) {
-        if (typeof value === "object" && "class_name_for_deserialization" in value) {
+        if (value !== null && typeof value === "object" && "class_name_for_deserialization" in value) {
             var class_name = value.class_name_for_deserialization;
             delete value.class_name_for_deserialization;
 
@@ -285,7 +366,7 @@ Timeline.prototype.get_max_y_offset = function() {
 }
 
 Timeline.prototype.events_in_time_range = function(start, end) {
-    in_view = new Set();
+    var in_view = new Set();
     var start_bucket = Math.floor(start / bucket_size);
     var end_bucket = Math.floor(end / bucket_size);
     for (var index = start_bucket; index <= end_bucket; ++index) {
@@ -439,13 +520,20 @@ Timeline.prototype.draw = function() {
     // events.
     var selected_set =  new Set(selection);
     for (var event of this.events_in_view()) {
+        // Skip "incomplete" events with no set rank.
+        if (event.rank === null) {
+            continue;
+        }
+
+        // Skip selected events that have been dragged to a new location/scale.
+        // We'll draw these below, when we do the previews.
         if (selected_set.has(event) &&
             (Timeline.move_preview_delta !== null ||
              Timeline.scale_preview_factor !== null)) {
             continue;
         }
-        var [x1, y1, width, height] = this.get_rect(event);
 
+        var [x1, y1, width, height] = this.get_rect(event);
         this.ctx.beginPath();
         this.ctx.rect(x1, y1, width, height);
         this.ctx.fillStyle = this.get_colour(event);
@@ -1122,7 +1210,6 @@ Layer.prototype.reifyFromJSON = function() {
 Layer.prototype.makeCanvasAndCtx = function() {
     var jCanvas = $('<canvas height="720px" width="1280px" style="position:absolute;left:0px;top:0px"></canvas>');
     jCanvas.attr('id', this.id);
-    $("#layer_set").append(jCanvas);
     this.canvas = jCanvas.get(0);
     this.ctx = this.canvas.getContext("2d");
     addMatrixTrackingToContext(this.ctx);
@@ -1180,10 +1267,6 @@ Layer.prototype.get_temp_canvas = function() {
         this.reset_temp_canvas();
     }
     return this.temp_canvas;
-}
-
-Layer.prototype.delete = function() {
-    $("#" + this.id).remove();
 }
 
 Layer.prototype.finalize_event = function(event) {
@@ -1368,8 +1451,7 @@ function compare_events(a, b) {
 
 function extract_events(bucket) {
     var all_events = [];
-    var i;
-    for (i = 0; i < bucket.length; i++) {
+    for (var i = 0; i < bucket.length; i++) {
         bucket[i].push_events_into(all_events);
     }
     all_events.sort(compare_events);
@@ -1398,7 +1480,7 @@ function evalPeriod(start, end, buckets, args) {
             continue;
         }
         var events = extract_events(buckets[bucket]);
-        for (i = 0; i < events.length; i++) {
+        for (var i = 0; i < events.length; i++) {
             var event = events[i];
             if (event.time >= bucket * bucket_size &&
                 event.time < (bucket+1) * bucket_size &&
@@ -1472,8 +1554,7 @@ function tick() {
     if (current_action && current_layer) {
         current_action.tick();
     }
-    var i;
-    for (i = 0; i < layers.length; i++) {
+    for (var i = 0; i < layers.length; i++) {
         draw(layers[i]);
         if (playing || changed || layers[i].timeline.needs_redraw) {
             // We need "playing or changed" instead of just "changed", because in the case
@@ -1562,9 +1643,6 @@ function update_layer_ancestors(layer) {
         }
     }
 }
-
-var always_clear = false;
-var always_reset_transform = false;
 
 function standard_draw(layer) {
     // Check if our layer ancestors have changed since last draw
@@ -2465,6 +2543,30 @@ function Transform(start, layer) {
     this.start = start;
     this.deltas = [];
     this.layer = layer;
+    this.rank = null;
+}
+
+Transform.prototype.expected_properties = new Set([
+    "start", "deltas", "layer", "rank",
+]);
+
+Transform.prototype.toJSON = makeJSONEncoder({
+    // Properties to transform to a wire-safe format (need to be converted back after deserialize).
+    deltas: (ds => ds.map(function (d) {
+        var serialized_d = {};
+        Object.assign(serialized_d, d);
+        serialized_d.m = serialize_matrix(serialized_d.m);
+        return serialized_d;
+    })),
+    layer: (layer => layer.id),
+});
+
+Transform.prototype.reifyFromJSON = function() {
+    // Map these properties back to their proper format.
+    for (var d of this.deltas) {
+        d.m = deserialize_matrix(d.m);
+    }
+    this.layer = get_layer_by_id(this.layer);
 }
 
 function TransformEval(args) {
@@ -2472,8 +2574,7 @@ function TransformEval(args) {
 }
 
 Transform.prototype.push_events_into = function(arr) {
-    var i;
-    for (i = 0; i < this.deltas.length; i++) {
+    for (var i = 0; i < this.deltas.length; i++) {
         arr.push({
             m: this.deltas[i].m,
             time: this.deltas[i].time + this.start,
@@ -2538,7 +2639,33 @@ Transform.prototype.reverse = function() {
 function VisibilityEvent(action, time, seq_id, layer) {
     this.action = action;
     this.start = time;
+    this.seq_id = seq_id;
+    this.layer = layer;
+    this.rank = null;
 
+    this.makeTimeProperty();
+}
+
+VisibilityEvent.prototype.expected_properties = new Set([
+    "action", "start", "seq_id", "layer", "rank", "time",
+]);
+
+VisibilityEvent.prototype.toJSON = makeJSONEncoder({
+    // Properties to discard (need to be reset after deserialize).
+    time: null,
+    // Properties to transform to a wire-safe format (need to be converted back after deserialize).
+    layer: (layer => layer.id),
+});
+
+VisibilityEvent.prototype.reifyFromJSON = function() {
+    // Map these properties back to their proper format.
+    this.layer = get_layer_by_id(this.layer);
+
+    // Rebuild some properties that need to be created fresh.
+    this.makeTimeProperty();
+}
+
+VisibilityEvent.prototype.makeTimeProperty = function() {
     // Define time as an alias for start
     Object.defineProperty(this, "time", {
         enumerable: true,
@@ -2550,10 +2677,6 @@ function VisibilityEvent(action, time, seq_id, layer) {
             this.start = value;
         }
     });
-
-    this.time = time;
-    this.seq_id = seq_id;
-    this.layer = layer;
 }
 
 VisibilityEvent.prototype.is_visible = function(target = null) {
@@ -3373,7 +3496,6 @@ var actions = [
     {key: "rotate_and_scale", title: "Rotation and Scale", tool: new TransformAction(rotate_and_scale, true, rotate_and_scale_filter)},
     {key: "viewport_transform", title: "Viewport Transform", tool: new ViewportAction()},
 ];
-var current_action = null;
 
 // Hide/show handlers
 function add_visibility_event(layer, action) {
@@ -3393,10 +3515,6 @@ function add_visibility_event(layer, action) {
     layer.timeline.assign_rank(event);
     layer.timeline.needs_redraw = true;
 }
-
-var layers = [];
-var next_layer_key = 1;
-var current_layer = null;
 
 // TODO: figure out proper encapsulation
 // TODO: error handling
@@ -3436,7 +3554,7 @@ var current_layer = null;
 
         rename_dialog.find( "form" ).on( "submit", function( event ) {
             event.preventDefault();
-            return end_rename_layer();
+            return maybe_end_rename_layer();
         });
 
         return rename_dialog;
@@ -3872,7 +3990,8 @@ function set_layer_relationships() {
 function update_layers() {
     var layer_handle_ids = get_layer_handles_in_order();
     var in_order = [];
-    var i;
+
+    var claimed_layer_ids = new Set();
 
     // Re-sort layers based on the order of the layer handles
     for (var id of layer_handle_ids) {
@@ -3880,6 +3999,7 @@ function update_layers() {
             return e.handle_id === id;
         });
         if (index !== -1) {
+            claimed_layer_ids.add(layers[index].id);
             in_order.push(layers[index]);
             layers.splice(index, 1);
         } else {
@@ -3891,10 +4011,32 @@ function update_layers() {
         }
     }
 
-    // Add new layers to the handle list
-    for (i = 0; i < layers.length; i++) {
-        var element = create_layer_handle(layers[i]);
-        element.appendTo($("#layer_selector"));
+    // Remove canvases for layers that are now deleted.
+    var unclaimed_layers = $("#layer_set canvas").filter(function() {
+        return this.id.startsWith("layer-") && !claimed_layer_ids.has(this.id);
+    });
+    unclaimed_layers.remove();
+
+    // Add new layers to the handle list and layer set
+    for (var i = 0; i < layers.length; i++) {
+        // Create and append the handle.
+        var handle = create_layer_handle(layers[i]);
+
+        if (layers[i].parent === null) {
+            // If the layer has no parent, just put the handle at the end of the list.
+            handle.appendTo($("#layer_selector"));;
+        } else {
+            // Otherwise, insert it into the list underneath its parent. We may need to create this list.
+            var parent_handle = layers[i].parent.handle_id;
+            var lst = $("#" + parent_handle + " ol");
+            if (lst.length === 0) {
+                lst = $("<ol></ol>").appendTo($("#" + parent_handle));
+            }
+            handle.appendTo(lst);
+        }
+
+        // Append the canvas.
+        $("#layer_set").append(layers[i].canvas);
     }
 
     layers = in_order.concat(layers);
@@ -3908,7 +4050,7 @@ function update_layers() {
     }
 
     // Reorder the actual canvas elements
-    for (i = 0; i < layers.length; i++) {
+    for (var i = 0; i < layers.length; i++) {
         $(layers[i].canvas).css("z-index", layers.length-i);
     }
     $("#viewport-overlay").css("z-index", layers.length+1);
@@ -4006,6 +4148,8 @@ function shallow_array_equals(a1, a2) {
 }
 
 function matrix_equals(m1, m2) {
+    if (m1 === null && m2 === null) return true;
+    if (m1 === null || m2 === null) return false;
     return (m1.a == m2.a) &&
         (m1.b == m2.b) &&
         (m1.c == m2.c) &&
@@ -4027,9 +4171,8 @@ function matrix_clone(m) {
 
 function delete_layer(layer) {
     var targets = new Set(get_layer_descendants(layer));
-    for (i = 0; i < layers.length;) {
+    for (var i = 0; i < layers.length;) {
         if (targets.has(layers[i])) {
-            layers[i].delete();
             layers.splice(i, 1);
         } else {
             ++i;
@@ -4118,8 +4261,7 @@ function go() {
 
 function tool_change() {
     if (current_action) current_action.finish();
-    var i;
-    for (i = 0; i < actions.length; i++) {
+    for (var i = 0; i < actions.length; i++) {
         if (actions[i].key == this.value) {
             current_action = actions[i].tool;
             break;
@@ -4414,8 +4556,7 @@ $(document).ready(function () {
     $("#new_image").on("click", begin_add_image);
     $("#reset_viewport").on("click", function() { viewport_matrix = getIdentityMatrix(); });
 
-    var i;
-    for (i = 0; i < actions.length; i++) {
+    for (var i = 0; i < actions.length; i++) {
         var text = (actions[i].creation !== undefined) ?
             actions[i].creation() :
             document.createTextNode(actions[i].title);
