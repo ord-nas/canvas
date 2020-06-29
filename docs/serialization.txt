@@ -1,0 +1,28 @@
+Serialization
+=============
+
+State is saved using Javascript's JSON.stringify() utility. A single, top-level object is serialized:
+
+var state = {
+  version: <version-string>,
+  layers: <array-of-layers>,
+  current_seq_id: <current-seq-id>,
+  next_layer_key: <next-layer-key>,
+};
+
+See project_file_version_info.txt for info on <version-string>.
+
+Many objects contain circular references, unserializable objects, or temporary state that should not be serialized. As such, many classes define a toJSON method (which is specially recognized by JSON.stringify()) to fix these issues.
+
+A utility function makeJSONEncoder is used to build toJSON methods, since a lot of the boilder-plate code is shared between classes. toJSON methods built by makeJSONEncoder have these properties:
+* They invoke any explicitly-defined toJSON methods on super-classes, in order from oldest ancestor to most recent ancestor.
+* They will throw if `this` contains any properties not explicitly included in the set `this.expected_properties`.
+* They serialize any property they see, in the default manner, unless it is explicitly deleted or transformed.
+* They add the key-value pair { class_name_for_deserialization : this.constructor.name } to the serialized object. This aids in deserialization.
+
+Deserialization happens in two stages.
+1. JSON.parse() is called, with a reviver built by makeJSONReviver. This reviver recognizes the "class_name_of_deserialization" property, and instead of parsing into a vanilla object, parses into an instance of this class.
+2. Once stage 1 is complete for all objects, any deserialized object which defines reifyFromJSON has that method invoked on. This is accomplished by creating a vector of reifyFromJSON callbacks during stage 1 as we're parsing. reifyFromJSON typically does these things:
+   * reconstruct circular references.
+   * rebuild any properties that had to be converted to a wire-safe format during serialization.
+   * recreate any properties which were not serialized.

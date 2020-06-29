@@ -1,0 +1,3 @@
+The only currently-supported version string is "0".
+
+This is a development version. It has no compatibility guarantees. The serialization format is allowed to undergo breaking changes that invalidate previously saved projects, even if the version number is not incremented.

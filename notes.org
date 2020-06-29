@@ -208,8 +208,8 @@
 ** DONE Fix bug where hidden layers still show up in exported video.
 * Save/Load
 ** DONE Implement basic functionality to serialize/deserialize to/from JSON
-*** TODO Add a writeup about this, since it's non-trivial
-*** TODO Start documentation for JSON format versioning
+*** DONE Add a writeup about this, since it's non-trivial
+*** DONE Start documentation for JSON format versioning
 ** DONE Move all global state to a single place
 ** DONE Implement functionality to stash/restore full global state
 ** TODO Implement "Save"
