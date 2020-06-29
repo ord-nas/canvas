@@ -18,7 +18,7 @@
 		    <input type="text" id="layer-rename-name" value="Layer Name" class="text ui-widget-content ui-corner-all">
 		</fieldset>
 	    </form>
-	    <div id="rename-error-message" style="visibility:hidden">
+	    <div id="rename-error-message" class="error-message" style="visibility:hidden">
 		Name already taken! Please choose another.
 	    </div>
 	</div>
@@ -50,9 +50,30 @@
 	    <div id="export-progress-bar"></div>
 	</div>
 
-	<p>Layers
-	    <button type="button" id="new_layer">New</button>
+	<div id="save-setup" title="Save Project As">
+	    <form>
+		<fieldset>
+		    Filename: <input type="text" id="save-filename" value="Project.cnvs" class="text ui-widget-content ui-corner-all" />
+		</fieldset>
+	    </form>
+	</div>
+
+	<div id="save-progress" title="Saving">
+	    <br/>
+	    <div id="save-progress-message"></div>
+	</div>
+
+	<p>
+	    Layers
+	    <button type="button" id="new_layer">New Layer</button>
 	    <button type="button" id="new_image">New Image</button>
+	    Project
+	    <button type="button" id="new_project">New Project</button>
+	    <button type="button" id="load_project">Load Project</button>
+	    <button type="button" id="save_project">Save Project</button>
+	    <button type="button" id="save_project_as">Save Project As</button>
+	    Current project:
+	    <span id="current_project_name">(unsaved project)</span>
 	</p>
 
 	<ol id="layer_selector" class="sortable ui-sortable mjs-nestedSortable-branch mjs-nestedSortable-expanded"></ol>

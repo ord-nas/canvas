@@ -1,31 +1,41 @@
+import time
 import os
 import base64
 import cv2
 import numpy as np
+import json
 from flask import Flask, request
 app = Flask(__name__,
             static_url_path='/static/',
             static_folder='static')
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
+# Global paths.
+EXPORT_PATH = '/home/sandro/Documents/Canvas Exports/'
+PROJECT_PATH = '/home/sandro/Documents/Canvas Projects/'
+
+def avoid_filename_conflicts(initial_filename):
+    (root, ext) = os.path.splitext(initial_filename)
+    adjusted_root = root
+    version = 0
+    while os.path.exists(adjusted_root + ext):
+        version += 1
+        adjusted_root = root + " " + str(version)
+    return adjusted_root + ext
+
 class ExportManager(object):
     def __init__(self, export_dir):
         self.export_dir = export_dir
         self.video_writer = None
-    def avoid_filename_conflicts(self, initial_filename):
-        (root, ext) = os.path.splitext(initial_filename)
-        adjusted_root = root
-        version = 0
-        while os.path.exists(os.path.join(self.export_dir, adjusted_root + ext)):
-            version += 1
-            adjusted_root = root + " " + str(version)
-        return adjusted_root + ext
     def start_export(self, filename, fps, frame_width, frame_height):
-        filename = self.avoid_filename_conflicts(filename)
+        (_, ext) = os.path.splitext(filename)
+        if ext == "":
+            filename = filename + ".avi"
+        path = os.path.join(self.export_dir, filename)
+        path = avoid_filename_conflicts(path)
         try:
             if self.video_writer is not None:
                 self.video_writer.release()
-            path = os.path.join(self.export_dir, filename)
             self.video_writer = cv2.VideoWriter(
                 path,
                 cv2.VideoWriter_fourcc('M','P','E','G'),
@@ -50,7 +60,7 @@ class ExportManager(object):
             return False
 
 # Global singleton
-export_manager = ExportManager('/home/sandro/Documents/Canvas Exports/')
+export_manager = ExportManager(EXPORT_PATH)
 
 def decode_frame(data_url):
     try:
@@ -107,3 +117,30 @@ def cancel_export():
     success = export_manager.finish_export()
     error_code = 200 if success else 500
     return '', error_code
+
+@app.route('/save_project', methods=['POST'])
+def save_project():
+    filename = request.form['project_filename']
+    data = request.form['project_data']
+    overwrite = request.form['overwrite']
+
+    # Construct the full path to write to.
+    (_, ext) = os.path.splitext(filename)
+    if ext == "":
+        filename = filename + ".cnvs"
+    path = os.path.join(PROJECT_PATH, filename)
+    print("overwrite", overwrite)
+    if overwrite != "true":
+        path = avoid_filename_conflicts(path)
+
+    try:
+        with open(path, "w") as f:
+            f.write(data)
+    except:
+        return '', 500
+
+    return_payload = {
+        "final_project_name" : os.path.basename(path),
+    }
+
+    return json.dumps(return_payload), 200

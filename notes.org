@@ -212,7 +212,7 @@
 *** DONE Start documentation for JSON format versioning
 ** DONE Move all global state to a single place
 ** DONE Implement functionality to stash/restore full global state
-** TODO Implement "Save"
-** TODO Implement "Save As"
+** DONE Implement "Save"
+** DONE Implement "Save As"
 ** TODO Implement "Open"
 ** TODO Implement "New"

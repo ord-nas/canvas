@@ -31,6 +31,7 @@ var layers = [];
 var next_layer_key = 1;
 var current_layer = null;
 var current_action = null;
+var current_project_filename = null;
 
 function resetGlobals() {
     playing = false;
@@ -48,6 +49,7 @@ function resetGlobals() {
     next_layer_key = 1;
     current_layer = null;
     current_action = null;
+    current_project_filename = null;
 }
 
 function resetState() {
@@ -77,9 +79,12 @@ function serializeState() {
     return JSON.stringify(state);
 }
 
-function deserializeState(state) {
+function deserializeState(state, project_filename) {
     // Reset everything.
     resetState();
+
+    // Install the new project filename.
+    setProjectFilename(project_filename);
 
     // Run JSON parser.
     var cbs = [];
@@ -98,6 +103,12 @@ function deserializeState(state) {
 
     // Run update_layers to update DOM.
     update_layers();
+}
+
+function setProjectFilename(project_filename) {
+    current_project_filename = project_filename;
+    var txt = current_project_filename === null ? "(unsaved_project)" : current_project_filename;
+    $("#current_project_name").text(txt);
 }
 
 var matrixMaker = {
@@ -3766,6 +3777,135 @@ function add_visibility_event(layer, action) {
     return [make_export_dialogs, begin_export_dialog];
 })();
 
+// TODO: figure out proper encapsulation
+[make_save_dialogs, begin_save_as_dialog, begin_save] = (function() {
+    var save_setup_dialog = null;
+    var save_progress_dialog = null;
+    var saving = false;
+
+    function begin_save_as_dialog() {
+        save_setup_dialog.dialog("open");
+    }
+
+    function begin_save() {
+        var filename = current_project_filename;
+        var overwrite = true;
+        if (typeof filename !== "string" || filename.length === 0) {
+            begin_save_as_dialog();
+        } else {
+            start_save_generic(filename, overwrite);
+        }
+    }
+
+    function cancel_save() {
+        saving = false;
+        save_progress_dialog.dialog("close");
+    }
+
+    function start_save_as() {
+        var filename = $("#save-filename").val();
+        var overwrite = false;
+        start_save_generic(filename, overwrite);
+    }
+
+    function start_save_generic(filename, overwrite) {
+        // Reset the progress dialog.
+        $("#save-progress-message").removeClass("error-message").text("Writing project to disk, please wait...");
+        save_progress_dialog.dialog({
+            buttons: {
+                "Cancel": cancel_save,
+            },
+        });
+
+        // Switch to the progress dialog.
+        save_setup_dialog.dialog("close");
+        save_progress_dialog.dialog("open");
+
+        // Serialize project state.
+        var state = serializeState();
+
+        // Define what to do on save success or failure.
+        var success_fn = function(data, status) {
+            if (saving) {
+                console.log("Save success!");
+                console.log(data);
+                console.log(status);
+                save_progress_dialog.dialog("close");
+                var payload = JSON.parse(data);
+                var project_filename = payload.final_project_name;
+                if (typeof project_filename !== "string" || project_filename.length === 0) {
+                    throw "Malformed response from server on save!";
+                }
+                setProjectFilename(project_filename);
+            }
+            saving = false;
+        };
+        var error_fn = function(data, status) {
+            console.log("Save errored out!");
+            console.log(data);
+            console.log(status);
+            $("#save-progress-message").addClass("error-message").text("Server error on save; check console for details or try again.");
+            save_progress_dialog.dialog({
+                buttons: {
+                    "Dismiss": function() {
+                        save_progress_dialog.dialog("close");
+                    },
+                },
+            });
+            saving = false;
+        };
+
+        // Start save.
+        saving = true;
+        $.ajax({
+            type: "POST",
+            url: "../save_project",
+            data: {
+                project_filename: filename,
+                project_data: state,
+                overwrite: overwrite,
+            },
+            success: success_fn,
+            error: error_fn,
+        });
+    }
+
+    function make_save_dialogs() {
+        save_setup_dialog = $("#save-setup").dialog({
+            autoOpen: false,
+            modal: true,
+            buttons: {
+                "Save": start_save_as,
+                "Cancel": function() {
+                    save_setup_dialog.dialog("close");
+                },
+            },
+        });
+        save_setup_dialog.find("form").on("submit", function( event ) {
+            event.preventDefault();
+            start_save_as();
+        });
+
+        save_progress_dialog = $("#save-progress").dialog({
+            autoOpen: false,
+            width: 600,
+            height: 180,
+            modal: true,
+            closeOnEscape: false,
+            open: function(event, ui) {
+                $(this).closest('.ui-dialog').find('.ui-dialog-titlebar-close').hide()
+            },
+            buttons: {
+                "Cancel": cancel_save,
+            },
+        });
+
+        return [save_setup_dialog, save_progress_dialog];
+    }
+
+    return [make_save_dialogs, begin_save_as_dialog, begin_save];
+})();
+
 function resize_timelines() {
     var min_target_width = null;
     for (var layer of layers) {
@@ -4552,6 +4692,8 @@ $(document).ready(function () {
     $("#stop").on("click", stop);
     $("#go").on("click", go);
     $("#export_dialog_button").on("click", begin_export_dialog);
+    $("#save_project").on("click", begin_save);
+    $("#save_project_as").on("click", begin_save_as_dialog);
     $("#new_layer").on("click", new_layer);
     $("#new_image").on("click", begin_add_image);
     $("#reset_viewport").on("click", function() { viewport_matrix = getIdentityMatrix(); });
@@ -4626,6 +4768,9 @@ $(document).ready(function () {
 
     // Set up the export video dialog
     make_export_dialogs();
+
+    // Set up the save dialog
+    make_save_dialogs();
 
     // Set up a resize handler to resize the timelines
     // TODO: this might act badly if we resize the window while we are

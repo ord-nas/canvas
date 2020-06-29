@@ -63,7 +63,7 @@ li.mjs-nestedSortable-collapsed.mjs-nestedSortable-hovering div {
 #rename-layer label, #rename-layer input { display:block; }
 #rename-layer input.text { margin-bottom:0px; width:95%; padding: .4em; }
 #rename-layer fieldset { padding:0; border:0; margin-top:10px; }
-#rename-error-message {
+.error-message {
   border-radius: 10px;
   border: 2px solid #FF0000;
   background: #EBC3BC;
@@ -73,11 +73,18 @@ li.mjs-nestedSortable-collapsed.mjs-nestedSortable-hovering div {
 #add-image label, #add-image input { display:block; }
 #add-image input.text { margin-bottom:0px; width:95%; padding: .4em; }
 #add-image fieldset { padding:0; border:0; margin-top:10px; }
+
 #export-setup label, #export-setup input { display:block; }
 #export-setup input.text { margin-bottom:0px; width:95%; padding: .4em; }
 #export-setup fieldset { padding:0; border:0; margin-top:10px; }
 #export-progress label { display:block; }
 #export-progress-percent { font-weight: bold; }
+
+#save-setup label, #save-setup input { display:block; }
+#save-setup input.text { margin-bottom:0px; width:95%; padding: .4em; }
+#save-setup fieldset { padding:0; border:0; margin-top:10px; }
+#save-progress label { display:block; }
+#save-progress-percent { font-weight: bold; }
 
 html * {
     user-select: none;
