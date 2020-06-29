@@ -4024,7 +4024,7 @@ function update_layers() {
 
         if (layers[i].parent === null) {
             // If the layer has no parent, just put the handle at the end of the list.
-            handle.appendTo($("#layer_selector"));;
+            handle.appendTo($("#layer_selector"));
         } else {
             // Otherwise, insert it into the list underneath its parent. We may need to create this list.
             var parent_handle = layers[i].parent.handle_id;
