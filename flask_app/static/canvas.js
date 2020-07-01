@@ -3947,6 +3947,12 @@ function add_visibility_event(layer, action) {
                 console.log(status);
                 open_progress_dialog.dialog("close");
                 deserializeState(data, filename);
+                // Sanity check that reserilization produces the same result.
+                // (Once we start versioning project format, this may no longer always be true).
+                var reserialized_state = serializeState();
+                if (data !== reserialized_state) {
+                    throw "loaded project data failed reserialization sanity check";
+                }
             }
             opening = false;
         };
