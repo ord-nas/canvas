@@ -129,7 +129,6 @@ def save_project():
     if ext == "":
         filename = filename + ".cnvs"
     path = os.path.join(PROJECT_PATH, filename)
-    print("overwrite", overwrite)
     if overwrite != "true":
         path = avoid_filename_conflicts(path)
 
@@ -144,3 +143,20 @@ def save_project():
     }
 
     return json.dumps(return_payload), 200
+
+@app.route('/open_project', methods=['POST'])
+def open_project():
+    filename = request.form['project_filename']
+
+    # Construct the full path to read from.
+    (_, ext) = os.path.splitext(filename)
+    if ext == "":
+        filename = filename + ".cnvs"
+    path = os.path.join(PROJECT_PATH, filename)
+
+    try:
+        with open(path, "r") as f:
+            return f.read(), 200
+    except:
+        return '', 500
+

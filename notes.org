@@ -214,5 +214,6 @@
 ** DONE Implement functionality to stash/restore full global state
 ** DONE Implement "Save"
 ** DONE Implement "Save As"
-** TODO Implement "Open"
+** DONE Implement "Open"
 ** TODO Implement "New"
+** TODO Implement basic folder navigation

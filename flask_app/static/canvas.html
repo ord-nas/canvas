@@ -63,13 +63,26 @@
 	    <div id="save-progress-message"></div>
 	</div>
 
+	<div id="open-setup" title="Open Project">
+	    <form>
+		<fieldset>
+		    Filename: <input type="text" id="open-filename" value="" class="text ui-widget-content ui-corner-all" />
+		</fieldset>
+	    </form>
+	</div>
+
+	<div id="open-progress" title="Opening">
+	    <br/>
+	    <div id="open-progress-message"></div>
+	</div>
+
 	<p>
 	    Layers
 	    <button type="button" id="new_layer">New Layer</button>
 	    <button type="button" id="new_image">New Image</button>
 	    Project
 	    <button type="button" id="new_project">New Project</button>
-	    <button type="button" id="load_project">Load Project</button>
+	    <button type="button" id="open_project">Open Project</button>
 	    <button type="button" id="save_project">Save Project</button>
 	    <button type="button" id="save_project_as">Save Project As</button>
 	    Current project:

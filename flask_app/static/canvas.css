@@ -86,6 +86,12 @@ li.mjs-nestedSortable-collapsed.mjs-nestedSortable-hovering div {
 #save-progress label { display:block; }
 #save-progress-percent { font-weight: bold; }
 
+#open-setup label, #open-setup input { display:block; }
+#open-setup input.text { margin-bottom:0px; width:95%; padding: .4em; }
+#open-setup fieldset { padding:0; border:0; margin-top:10px; }
+#open-progress label { display:block; }
+#open-progress-percent { font-weight: bold; }
+
 html * {
     user-select: none;
 }

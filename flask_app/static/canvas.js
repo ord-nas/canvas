@@ -62,6 +62,9 @@ function resetState() {
     // Call update_layers to delete layer artifacts from the DOM.
     update_layers();
 
+    // Ensure that a tool is actually selected.
+    $("input[type=radio][name=tool]:checked").change();
+
     // Reset displayed project time.
     $("#time").val(current_project_time / 1000);
 }
@@ -3906,6 +3909,111 @@ function add_visibility_event(layer, action) {
     return [make_save_dialogs, begin_save_as_dialog, begin_save];
 })();
 
+// TODO: figure out proper encapsulation
+[make_open_dialogs, begin_open_dialog] = (function() {
+    var open_setup_dialog = null;
+    var open_progress_dialog = null;
+    var opening = false;
+
+    function begin_open_dialog() {
+        open_setup_dialog.dialog("open");
+    }
+
+    function cancel_open() {
+        opening = false;
+        open_progress_dialog.dialog("close");
+    }
+
+    function start_open() {
+        var filename = $("#open-filename").val();
+
+        // Reset the progress dialog.
+        $("#open-progress-message").removeClass("error-message").text("Loading project from disk, please wait...");
+        open_progress_dialog.dialog({
+            buttons: {
+                "Cancel": cancel_open,
+            },
+        });
+
+        // Switch to the progress dialog.
+        open_setup_dialog.dialog("close");
+        open_progress_dialog.dialog("open");
+
+        // Define what to do on open success or failure.
+        var success_fn = function(data, status) {
+            if (opening) {
+                console.log("Open success!");
+                console.log(data);
+                console.log(status);
+                open_progress_dialog.dialog("close");
+                deserializeState(data, filename);
+            }
+            opening = false;
+        };
+        var error_fn = function(data, status) {
+            console.log("Open errored out!");
+            console.log(data);
+            console.log(status);
+            $("#open-progress-message").addClass("error-message").text("Server error on open; check console for details or try again.");
+            open_progress_dialog.dialog({
+                buttons: {
+                    "Dismiss": function() {
+                        open_progress_dialog.dialog("close");
+                    },
+                },
+            });
+            opening = false;
+        };
+
+        // Start open.
+        opening = true;
+        $.ajax({
+            type: "POST",
+            url: "../open_project",
+            data: {
+                project_filename: filename,
+            },
+            success: success_fn,
+            error: error_fn,
+        });
+    }
+
+    function make_open_dialogs() {
+        open_setup_dialog = $("#open-setup").dialog({
+            autoOpen: false,
+            modal: true,
+            buttons: {
+                "Open": start_open,
+                "Cancel": function() {
+                    open_setup_dialog.dialog("close");
+                },
+            },
+        });
+        open_setup_dialog.find("form").on("submit", function( event ) {
+            event.preventDefault();
+            start_open();
+        });
+
+        open_progress_dialog = $("#open-progress").dialog({
+            autoOpen: false,
+            width: 600,
+            height: 180,
+            modal: true,
+            closeOnEscape: false,
+            open: function(event, ui) {
+                $(this).closest('.ui-dialog').find('.ui-dialog-titlebar-close').hide()
+            },
+            buttons: {
+                "Cancel": cancel_open,
+            },
+        });
+
+        return [open_setup_dialog, open_progress_dialog];
+    }
+
+    return [make_open_dialogs, begin_open_dialog];
+})();
+
 function resize_timelines() {
     var min_target_width = null;
     for (var layer of layers) {
@@ -4694,6 +4802,7 @@ $(document).ready(function () {
     $("#export_dialog_button").on("click", begin_export_dialog);
     $("#save_project").on("click", begin_save);
     $("#save_project_as").on("click", begin_save_as_dialog);
+    $("#open_project").on("click", begin_open_dialog);
     $("#new_layer").on("click", new_layer);
     $("#new_image").on("click", begin_add_image);
     $("#reset_viewport").on("click", function() { viewport_matrix = getIdentityMatrix(); });
@@ -4769,8 +4878,9 @@ $(document).ready(function () {
     // Set up the export video dialog
     make_export_dialogs();
 
-    // Set up the save dialog
+    // Set up the save/open dialogs
     make_save_dialogs();
+    make_open_dialogs();
 
     // Set up a resize handler to resize the timelines
     // TODO: this might act badly if we resize the window while we are
