@@ -4,6 +4,7 @@ import base64
 import cv2
 import numpy as np
 import json
+import re
 from flask import Flask, request
 app = Flask(__name__,
             static_url_path='/static/',
@@ -14,13 +15,22 @@ app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 EXPORT_PATH = '/home/sandro/Documents/Canvas Exports/'
 PROJECT_PATH = '/home/sandro/Documents/Canvas Projects/'
 
+def filename_with_version(filename, version):
+    m = re.match(r'^(.*) \(([1-9][0-9]*)\)$', filename)
+    if not m:
+        return "%s (%d)" % (filename, version)
+    else:
+        number = int(m.group(2))
+        number += version
+        return "%s (%d)" % (m.group(1), number)
+
 def avoid_filename_conflicts(initial_filename):
     (root, ext) = os.path.splitext(initial_filename)
     adjusted_root = root
     version = 0
     while os.path.exists(adjusted_root + ext):
         version += 1
-        adjusted_root = root + " " + str(version)
+        adjusted_root = filename_with_version(root, version)
     return adjusted_root + ext
 
 class ExportManager(object):
