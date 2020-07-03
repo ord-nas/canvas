@@ -3961,9 +3961,43 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
     var save_setup_dialog = null;
     var save_progress_dialog = null;
     var saving = false;
+    var project_directory_contents = null;
+    var directory_browser = null;
 
     function begin_save_as_dialog() {
-        save_setup_dialog.dialog("open");
+        // Start by trying to list the project directory contents.
+        // Define what to do on open success or failure.
+        var success_fn = function(data, status) {
+            console.log("List project directory success!");
+            console.log(data);
+            console.log(status);
+            project_directory_contents = JSON.parse(data)["project_directory_contents"];
+            save_setup_dialog.dialog("open");
+        };
+        var error_fn = function(data, status) {
+            console.log("List project directory errored out!");
+            console.log(data);
+            console.log(status);
+            $("#save-progress-message").addClass("error-message").text("Server error listing projects; check console for details or try again.");
+            save_progress_dialog.dialog({
+                buttons: {
+                    "Dismiss": function() {
+                        save_progress_dialog.dialog("close");
+                    },
+                },
+            });
+            save_progress_dialog.dialog("open");
+        };
+
+        // List project directory contents.
+        $.ajax({
+            type: "GET",
+            url: "../list_project_directory",
+            data: {},
+            success: success_fn,
+            error: error_fn,
+        });
+
     }
 
     function begin_save() {
@@ -3982,9 +4016,17 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
     }
 
     function start_save_as() {
+        var directory = directory_browser.getSelection();
+        if (directory === null) {
+            return;
+        }
         var filename = $("#save-filename").val();
+        if (filename === "") {
+            return;
+        }
+        var filepath = directory === "" ? filename : directory + "/" + filename;
         var overwrite = false;
-        start_save_generic(filename, overwrite);
+        start_save_generic(filepath, overwrite);
     }
 
     function start_save_generic(filename, overwrite) {
@@ -4053,6 +4095,20 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
         save_setup_dialog = $("#save-setup").dialog({
             autoOpen: false,
             modal: true,
+            open: function(event, ui) {
+                directory_browser = new SimpleDirectoryBrowser(
+                    "save-setup-directory",
+                    project_directory_contents,
+                    /*allow_select_directory=*/true,
+                    /*allow_select_file=*/false,
+                    /*initial_path=*/current_project_filepath);
+                var filename = "Project.cnvs";
+                if (current_project_filepath !== null) {
+                    var parts = current_project_filepath.split("/");
+                    filename = parts[parts.length-1];
+                }
+                $("#save-filename").val(filename);
+            },
             buttons: {
                 "Save": start_save_as,
                 "Cancel": function() {
