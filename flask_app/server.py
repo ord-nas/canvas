@@ -140,7 +140,7 @@ def save_project():
         return '', 500
 
     return_payload = {
-        "final_project_name" : os.path.basename(path),
+        "final_project_name" : os.path.relpath(path, PROJECT_PATH)
     }
 
     return json.dumps(return_payload), 200
