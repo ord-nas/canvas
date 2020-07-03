@@ -5112,6 +5112,17 @@
 				/**
 				 * Load font, either from Google or from local url.
 				 *
+				 * @param {string} fontSpec Font spec.
+				 */
+				loadFontFromSpec: function(fontSpec) {
+					var obj = $(this).data("plugin_fontpicker");
+					var font = obj.fontSpecToComponents(fontSpec);
+					obj.loadFont(__googleFonts[font.family] ? 'google' : 'local', font.family);
+				},
+
+				/**
+				 * Load font, either from Google or from local url.
+				 *
 				 * @param {string} type Font type, either 'google' or 'local'.
 				 * @param {string} font Font family name. F.e: 'Chakra', 'Zilla Slab'.
 				 */

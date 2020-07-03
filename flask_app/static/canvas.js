@@ -1829,6 +1829,14 @@ function set_current_project_time() {
     }
 }
 
+function load_font(fontSpec) {
+    if (typeof fontSpec !== "string" || fontSpec === "") {
+        return;
+    }
+    console.log(`Loading font ${fontSpec} ...`);
+    $("#font_selector").fontpicker("loadFontFromSpec", fontSpec);
+}
+
 // Copied from fontpicker.
 function font_spec_to_components(fontSpec) {
     var tmp = fontSpec.split(':'),
@@ -1847,7 +1855,8 @@ function font_spec_to_components(fontSpec) {
     return {
         family: family,
         weight: weight,
-        italic: italic
+        italic: italic,
+        fontpicker_spec: fontSpec,
     }
 }
 
@@ -2441,7 +2450,7 @@ Table.prototype.create_objs = function() {
 // Text
 
 // valign and halign are either -1 (left/top), 0 (centre), or 1 (right/bottom).
-function Text(letters, centre, x_axis, y_axis, start_time, colour, font, valign, halign, layer) {
+function Text(letters, centre, x_axis, y_axis, start_time, colour, font, fontpicker_spec, valign, halign, layer) {
     if (letters.length < 1) {
         console.log("ERROR: tried to construct text with not enough letters");
     }
@@ -2460,6 +2469,7 @@ function Text(letters, centre, x_axis, y_axis, start_time, colour, font, valign,
                   seq_id: y_axis.seq_id}];
     this.letters = letters;
     this.font = font;
+    this.fontpicker_spec = fontpicker_spec;
     this.valign = valign;
     this.halign = halign;
 }
@@ -2470,8 +2480,15 @@ Text.measuring_canvas_singleton = $("<canvas></canvas>").get(0);
 Text.measuring_ctx_singleton = Text.measuring_canvas_singleton.getContext("2d");
 
 Text.prototype.expected_properties = new Set([
-    "start", "colour", "width", "pnts", "layer", "rank", "letters", "font", "valign", "halign",
+    "start", "colour", "width", "pnts", "layer", "rank", "letters", "font", "fontpicker_spec", "valign", "halign",
 ]);
+
+Text.prototype.reifyFromJSON = function() {
+    Stroke.prototype.reifyFromJSON.call(this);
+
+    // Make sure the font is loaded.
+    load_font(this.fontpicker_spec);
+}
 
 Text.prototype.push_events_into = function(arr) {
     var ctx = Text.measuring_ctx_singleton;
@@ -3190,6 +3207,7 @@ TextAction.prototype.reset = function() {
     var font_weight = text_style.weight;
     var font_family = text_style.family;
     this.font = `${font_style} ${font_weight} ${font_size}px ${font_family}`;
+    this.fontpicker_spec = text_style.fontpicker_spec;
     console.log(this.font);
     this.color = get_current_colour();
     [this.valign, this.halign] = get_current_text_alignment();
@@ -3199,7 +3217,7 @@ TextAction.prototype.maybe_create_object = function() {
     if (this.letters.length > 0) {
         debug = true;
         var obj = make_text(this.letters, this.start_pnt, this.start_time, this.color,
-                            this.font, this.valign, this.halign);
+                            this.font, this.fontpicker_spec,this.valign, this.halign);
         set_obj_layer(obj, current_layer);
     }
     draw_tmp_object(null);
@@ -3209,17 +3227,17 @@ TextAction.prototype.draw_tmp = function() {
     var tmp_obj = null;
     if (this.letters.length > 0) {
         tmp_obj = make_text(this.letters, this.start_pnt, this.start_time, this.color,
-                            this.font, this.valign, this.halign);
+                            this.font, this.fontpicker_spec, this.valign, this.halign);
     }
     draw_tmp_object(tmp_obj);
 }
 
-function make_text(letters, start_pnt, start_time, color, font, valign, halign) {
+function make_text(letters, start_pnt, start_time, color, font, fontpicker_spec, valign, halign) {
     var center = {x: start_pnt.x, y: start_pnt.y, seq_id: current_seq_id++};
     var x_axis = {x: center.x + 1, y: center.y, seq_id: current_seq_id++};
     var y_axis = {x: center.x, y: center.y + 1, seq_id: current_seq_id++};
     var layer = null;
-    return new Text(letters, center, x_axis, y_axis, start_time, color, font, valign, halign, layer);
+    return new Text(letters, center, x_axis, y_axis, start_time, color, font, fontpicker_spec, valign, halign, layer);
 }
 
 // PolygonAction
