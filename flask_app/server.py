@@ -12,7 +12,6 @@ app = Flask(__name__,
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 # Global paths.
-EXPORT_PATH = '/home/sandro/Documents/Canvas Exports/'
 PROJECT_PATH = '/home/sandro/Documents/Canvas Projects/'
 
 def filename_with_version(filename, version):
@@ -70,7 +69,7 @@ class ExportManager(object):
             return False
 
 # Global singleton
-export_manager = ExportManager(EXPORT_PATH)
+export_manager = ExportManager(PROJECT_PATH)
 
 def decode_frame(data_url):
     try:
