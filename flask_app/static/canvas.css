@@ -92,6 +92,13 @@ li.mjs-nestedSortable-collapsed.mjs-nestedSortable-hovering div {
 #open-progress label { display:block; }
 #open-progress-percent { font-weight: bold; }
 
+.directory-browser {
+    display: block;
+    width: 100%;
+    overflow: auto;
+    height: 500px;
+}
+
 html * {
     user-select: none;
 }

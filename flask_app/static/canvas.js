@@ -31,7 +31,7 @@ var layers = [];
 var next_layer_key = 1;
 var current_layer = null;
 var current_action = null;
-var current_project_filename = null;
+var current_project_filepath = null;
 
 function resetGlobals() {
     playing = false;
@@ -49,7 +49,7 @@ function resetGlobals() {
     next_layer_key = 1;
     current_layer = null;
     current_action = null;
-    current_project_filename = null;
+    current_project_filepath = null;
 }
 
 function resetState() {
@@ -109,8 +109,8 @@ function deserializeState(state, project_filename) {
 }
 
 function setProjectFilename(project_filename) {
-    current_project_filename = project_filename;
-    var txt = current_project_filename === null ? "(unsaved_project)" : current_project_filename;
+    current_project_filepath = project_filename;
+    var txt = current_project_filepath === null ? "(unsaved_project)" : current_project_filepath;
     $("#current_project_name").text(txt);
 }
 
@@ -3780,6 +3780,161 @@ function add_visibility_event(layer, action) {
     return [make_export_dialogs, begin_export_dialog];
 })();
 
+function SimpleDirectoryBrowser(element_id, directory_contents, allow_select_directory, allow_select_file) {
+    this.directory_contents = {};
+    // Add a leading / to each non-empty directory name, to make processing more uniform.
+    for (var key in directory_contents) {
+        var val = directory_contents[key];
+        if (key !== "") {
+            key = "/" + key;
+        }
+        this.directory_contents[key] = val;
+    }
+
+    this.allow_select_directory = allow_select_directory;
+    this.allow_select_file = allow_select_file;
+
+    this.current_path = "";
+
+    this.jElement = $("#" + element_id).addClass("directory-browser");
+    this.updateUI();
+}
+
+SimpleDirectoryBrowser.prototype.updateUI = function() {
+    this.jElement.empty();
+    var parts = this.current_path.split("/");
+    for (var i = 0; i < parts.length; i++) {
+        var path = parts.slice(0, i+1).join("/");
+        this.selectEntry(path);
+        this.addDirectory(path);
+    }
+    this.installCallbacks();
+};
+
+SimpleDirectoryBrowser.prototype.getValFromEntry = function(contents, entry) {
+    for (var i = 0; i < contents.directories.length; i++) {
+        if (entry === contents.directories[i]) {
+            return "directory-" + i;
+        }
+    }
+
+    for (var i = 0; i < contents.files.length; i++) {
+        if (entry === contents.files[i]) {
+            return "file-" + i;
+        }
+    }
+
+    return "null";
+};
+
+SimpleDirectoryBrowser.prototype.getEntryFromVal = function(contents, val) {
+    var parts = val.split("-");
+    if (parts.length !== 2) {
+        return null;
+    }
+    var type = parts[0];
+    var index = parseInt(parts[1]);
+    if (type === "file") {
+        return contents.files[index];
+    }
+    if (type === "directory") {
+        return contents.directories[index];
+    }
+    return null;
+}
+
+SimpleDirectoryBrowser.prototype.selectEntry = function(path) {
+    var parts = path.split("/");
+    var context = parts.slice(0, parts.length - 1).join("/");
+    var element = parts[parts.length - 1];
+    var contents = this.directory_contents[context];
+    var level = parts.length - 2;
+    if (level < 0) {
+        return;
+    }
+    var val = this.getValFromEntry(contents, element);
+    var select = this.jElement.find(`[data-level="${level}"]`);
+    select.val(val).selectmenu("refresh");
+};
+
+SimpleDirectoryBrowser.prototype.installCallbacks = function(path) {
+    var browser = this;
+    this.jElement.find("select").on("selectmenuchange", function(event, ui) {
+        var level = $(this).attr("data-level");
+        browser.setPathUpToLevel(level);
+        browser.updateUI();
+    });
+};
+
+SimpleDirectoryBrowser.prototype.setPathUpToLevel = function(level) {
+    this.current_path = "";
+    for (var i = 0; i <= level; i++) {
+        var contents = this.directory_contents[this.current_path];
+        if (contents === undefined) {
+            return;
+        }
+        var select = this.jElement.find(`[data-level="${i}"]`);
+        var val = select.val();
+        if (val === null) {
+            return;
+        }
+        var entry = this.getEntryFromVal(contents, val);
+        if (entry === null) {
+            return;
+        }
+        this.current_path += "/" + entry;
+    }
+};
+
+SimpleDirectoryBrowser.prototype.addDirectory = function(path) {
+    var contents = this.directory_contents[path];
+    if (contents === undefined) {
+        return;
+    }
+
+    var dirs = $('<optgroup label="Directories"></optgroup>');
+    for (var i = 0; i < contents.directories.length; i++) {
+        var dir = contents.directories[i];
+        var entry = $("<option></option>").text(dir + "/").val("directory-" + i).appendTo(dirs);
+    }
+
+    var files = $('<optgroup label="Files"></optgroup>');
+    for (var i = 0; i < contents.files.length; i++) {
+        var file = contents.files[i];
+        var entry = $("<option></option>").text(file).val("file-" + i).appendTo(files);
+    }
+
+    var level = path.split("/").length - 1;
+    var select = ($("<select></select>")
+                  .attr("data-level", level)
+                  .append('<option selected value="null"></option>')
+                  .append(dirs)
+                  .append(files)
+                  .appendTo(this.jElement)
+                  .selectmenu()
+                  .selectmenu("menuWidget")
+                  .css("max-height", "500px"));
+};
+
+SimpleDirectoryBrowser.prototype.isDirectory = function(path) {
+    return this.directory_contents[path] !== undefined;
+};
+
+SimpleDirectoryBrowser.prototype.getSelection = function() {
+    var is_dir = this.isDirectory(this.current_path);
+    if (is_dir && !this.allow_select_directory) {
+        return null;
+    }
+    if (!is_dir && !this.allow_select_file) {
+        return null;
+    }
+    if (this.current_path.startsWith("/")) {
+        // Remove the leading '/' so that this is a relative path.
+        return this.current_path.substring(1);
+    }
+    return this.current_path;
+};
+
 // TODO: figure out proper encapsulation
 [make_save_dialogs, begin_save_as_dialog, begin_save] = (function() {
     var save_setup_dialog = null;
@@ -3791,7 +3946,7 @@ function add_visibility_event(layer, action) {
     }
 
     function begin_save() {
-        var filename = current_project_filename;
+        var filename = current_project_filepath;
         var overwrite = true;
         if (typeof filename !== "string" || filename.length === 0) {
             begin_save_as_dialog();
@@ -3914,9 +4069,42 @@ function add_visibility_event(layer, action) {
     var open_setup_dialog = null;
     var open_progress_dialog = null;
     var opening = false;
+    var project_directory_contents = null;
+    var directory_browser = null;
 
     function begin_open_dialog() {
-        open_setup_dialog.dialog("open");
+        // Start by trying to list the project directory contents.
+        // Define what to do on open success or failure.
+        var success_fn = function(data, status) {
+            console.log("List project directory success!");
+            console.log(data);
+            console.log(status);
+            project_directory_contents = JSON.parse(data)["project_directory_contents"];
+            open_setup_dialog.dialog("open");
+        };
+        var error_fn = function(data, status) {
+            console.log("List project directory errored out!");
+            console.log(data);
+            console.log(status);
+            $("#open-progress-message").addClass("error-message").text("Server error listing projects; check console for details or try again.");
+            open_progress_dialog.dialog({
+                buttons: {
+                    "Dismiss": function() {
+                        open_progress_dialog.dialog("close");
+                    },
+                },
+            });
+            open_progress_dialog.dialog("open");
+        };
+
+        // List project directory contents.
+        $.ajax({
+            type: "GET",
+            url: "../list_project_directory",
+            data: {},
+            success: success_fn,
+            error: error_fn,
+        });
     }
 
     function cancel_open() {
@@ -3925,7 +4113,10 @@ function add_visibility_event(layer, action) {
     }
 
     function start_open() {
-        var filename = $("#open-filename").val();
+        var filename = directory_browser.getSelection();
+        if (filename === null) {
+            return;
+        }
 
         // Reset the progress dialog.
         $("#open-progress-message").removeClass("error-message").text("Loading project from disk, please wait...");
@@ -3988,6 +4179,13 @@ function add_visibility_event(layer, action) {
         open_setup_dialog = $("#open-setup").dialog({
             autoOpen: false,
             modal: true,
+            open: function(event, ui) {
+                directory_browser = new SimpleDirectoryBrowser(
+                    "open-setup-directory",
+                    project_directory_contents,
+                    /*allow_select_directory=*/false,
+                    /*allow_select_file=*/true);
+            },
             buttons: {
                 "Open": start_open,
                 "Cancel": function() {

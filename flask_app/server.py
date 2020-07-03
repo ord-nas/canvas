@@ -133,6 +133,7 @@ def save_project():
         path = avoid_filename_conflicts(path)
 
     try:
+        print("About to save to: " + path)
         with open(path, "w") as f:
             f.write(data)
     except:
@@ -155,8 +156,26 @@ def open_project():
     path = os.path.join(PROJECT_PATH, filename)
 
     try:
+        print("About to open: " + path)
         with open(path, "r") as f:
             return f.read(), 200
     except:
         return '', 500
 
+@app.route('/list_project_directory', methods=['GET'])
+def list_project_directory():
+    directory_info = {}
+    for (root, dirs, files) in os.walk(PROJECT_PATH):
+        relpath = os.path.relpath(root, PROJECT_PATH)
+        if relpath == ".":
+            relpath = ""
+        directory_info[relpath] = {
+            "files": sorted(files),
+            "directories": sorted(dirs),
+        }
+
+    return_payload = {
+        "project_directory_contents": directory_info,
+    }
+
+    return json.dumps(return_payload), 200
