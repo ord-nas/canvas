@@ -130,7 +130,7 @@ def cancel_export():
 
 @app.route('/save_project', methods=['POST'])
 def save_project():
-    filename = request.form['project_filename']
+    filename = request.form['project_filepath']
     data = request.form['project_data']
     overwrite = request.form['overwrite']
 
@@ -150,14 +150,14 @@ def save_project():
         return '', 500
 
     return_payload = {
-        "final_project_name" : os.path.relpath(path, PROJECT_PATH)
+        "final_project_path" : os.path.relpath(path, PROJECT_PATH)
     }
 
     return json.dumps(return_payload), 200
 
 @app.route('/open_project', methods=['POST'])
 def open_project():
-    filename = request.form['project_filename']
+    filename = request.form['project_filepath']
 
     # Construct the full path to read from.
     (_, ext) = os.path.splitext(filename)

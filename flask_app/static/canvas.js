@@ -82,12 +82,12 @@ function serializeState() {
     return JSON.stringify(state);
 }
 
-function deserializeState(state, project_filename) {
+function deserializeState(state, project_filepath) {
     // Reset everything.
     resetState();
 
-    // Install the new project filename.
-    setProjectFilename(project_filename);
+    // Install the new project filepath.
+    setProjectFilepath(project_filepath);
 
     // Run JSON parser.
     var cbs = [];
@@ -108,8 +108,8 @@ function deserializeState(state, project_filename) {
     update_layers();
 }
 
-function setProjectFilename(project_filename) {
-    current_project_filepath = project_filename;
+function setProjectFilepath(project_filepath) {
+    current_project_filepath = project_filepath;
     var txt = current_project_filepath === null ? "(unsaved_project)" : current_project_filepath;
     $("#current_project_name").text(txt);
 }
@@ -4001,12 +4001,12 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
     }
 
     function begin_save() {
-        var filename = current_project_filepath;
+        var filepath = current_project_filepath;
         var overwrite = true;
-        if (typeof filename !== "string" || filename.length === 0) {
+        if (typeof filepath !== "string" || filepath.length === 0) {
             begin_save_as_dialog();
         } else {
-            start_save_generic(filename, overwrite);
+            start_save_generic(filepath, overwrite);
         }
     }
 
@@ -4029,7 +4029,7 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
         start_save_generic(filepath, overwrite);
     }
 
-    function start_save_generic(filename, overwrite) {
+    function start_save_generic(filepath, overwrite) {
         // Reset the progress dialog.
         $("#save-progress-message").removeClass("error-message").text("Writing project to disk, please wait...");
         save_progress_dialog.dialog({
@@ -4053,11 +4053,11 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
                 console.log(status);
                 save_progress_dialog.dialog("close");
                 var payload = JSON.parse(data);
-                var project_filename = payload.final_project_name;
-                if (typeof project_filename !== "string" || project_filename.length === 0) {
+                var project_filepath = payload.final_project_path;
+                if (typeof project_filepath !== "string" || project_filepath.length === 0) {
                     throw "Malformed response from server on save!";
                 }
-                setProjectFilename(project_filename);
+                setProjectFilepath(project_filepath);
             }
             saving = false;
         };
@@ -4082,7 +4082,7 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
             type: "POST",
             url: "../save_project",
             data: {
-                project_filename: filename,
+                project_filepath: filepath,
                 project_data: state,
                 overwrite: overwrite,
             },
@@ -4190,8 +4190,8 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
     }
 
     function start_open() {
-        var filename = directory_browser.getSelection();
-        if (filename === null) {
+        var filepath = directory_browser.getSelection();
+        if (filepath === null) {
             return;
         }
 
@@ -4214,7 +4214,7 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
                 console.log(data);
                 console.log(status);
                 open_progress_dialog.dialog("close");
-                deserializeState(data, filename);
+                deserializeState(data, filepath);
                 // Sanity check that reserilization produces the same result.
                 // (Once we start versioning project format, this may no longer always be true).
                 var reserialized_state = serializeState();
@@ -4245,7 +4245,7 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
             type: "POST",
             url: "../open_project",
             data: {
-                project_filename: filename,
+                project_filepath: filepath,
             },
             success: success_fn,
             error: error_fn,
