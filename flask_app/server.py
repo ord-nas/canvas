@@ -41,7 +41,9 @@ class ExportManager(object):
         if ext == "":
             filename = filename + ".avi"
         path = os.path.join(self.export_dir, filename)
-        path = avoid_filename_conflicts(path)
+        new_path = avoid_filename_conflicts(path)
+        adjustment_performed = (new_path != path)
+        path = new_path
         try:
             if self.video_writer is not None:
                 self.video_writer.release()
@@ -50,10 +52,13 @@ class ExportManager(object):
                 cv2.VideoWriter_fourcc('M','P','E','G'),
                 fps,
                 (frame_width,frame_height))
-            return True
+            return {
+                "final_export_path" : os.path.relpath(path, PROJECT_PATH),
+                "path_adjusted_to_avoid_overwrite" : adjustment_performed
+            }
         except:
             self.video_writer = None
-            return False
+            return None
     def write_frame(self, frame):
         try:
             self.video_writer.write(frame)
@@ -91,12 +96,14 @@ def hello_world():
 @app.route('/start_export', methods=['POST'])
 def start_export():
     global export_manager
-    success = export_manager.start_export(request.form['filename'],
+    outcome = export_manager.start_export(request.form['filename'],
                                           int(request.form['fps']),
                                           int(request.form['frame_width']),
                                           int(request.form['frame_height']))
-    error_code = 200 if success else 500
-    return '', error_code
+    if outcome is None:
+        return '', 500
+    else:
+        return json.dumps(outcome), 200
 
 @app.route('/write_frame', methods=['POST'])
 def write_frame():

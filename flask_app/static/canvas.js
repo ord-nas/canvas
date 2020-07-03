@@ -3715,6 +3715,8 @@ function add_visibility_event(layer, action) {
         $("#export-progress-percent").text(`Current progress: 0.0%`);
         $("#export-progress-time").text(`(0 of ??? seconds)`);
         $("#export-progress-frames").text(`(0 of approximately ??? frames)`);
+        $("#export-progress-filename").text(`Exporting to: `);
+        $("#export-progress-message").empty().css("display", "none");
         export_progress_dialog.dialog({
             buttons: {
                 "Cancel Export": cancel_export,
@@ -3772,6 +3774,21 @@ function add_visibility_event(layer, action) {
             $("#export-progress-percent").text(`Current progress: ${p.progress_percent.toFixed(1)}%`);
             $("#export-progress-time").text(`(${p.progress_time.toFixed(1)} of ${p.total_time.toFixed(1)} seconds)`);
             $("#export-progress-frames").text(`(${p.progress_frames} of approximately ${p.total_frames} frames)`);
+            if (p.final_export_path !== null) {
+                $("#export-progress-filename").text(`Exporting to: ${p.final_export_path}`);
+            }
+            if (p.path_adjusted_to_avoid_overwrite == true) {
+                var msg_div = $("<div></div>")
+                    .addClass("success-message")
+                    .text("Filename adjusted to avoid overwrite conflict.");
+                $("#export-progress-message")
+                    .empty()
+                    .css("display", "block")
+                    .append("<br/>")
+                    .append(msg_div)
+                    .append("<br/>")
+                    .append("<br/>");
+            }
         };
         export_manager = new ExportManager(
             filepath, fps, width, height, start_time, end_time,
@@ -4129,7 +4146,7 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
                     $("#save-progress-message")
                         .addClass("success-message")
                         .removeClass("error-message")
-                        .text("Filename adjust to avoid overwrite conflict.");
+                        .text("Filename adjusted to avoid overwrite conflict.");
                     save_progress_dialog.dialog({
                         buttons: {
                             "Dismiss": function() {
@@ -4905,6 +4922,8 @@ function ExportManager(filename, fps, width, height, start_time, end_time, succe
     this.error = error;
     this.progress = progress;
 
+    this.start_export_server_response = null;
+
     // Make a canvas for collapsing layers.
     var jCanvas = $('<canvas></canvas>');
     jCanvas.attr("width", width);
@@ -4919,6 +4938,15 @@ ExportManager.prototype.make_progress_object = function() {
         last_exported_frame = 0;
     }
     var last_exported_time = this.start_time + last_exported_frame / this.fps;
+    var final_export_path = (
+        this.start_export_server_response === null
+            ? null
+            : this.start_export_server_response.final_export_path);
+    var path_adjusted_to_avoid_overwrite = (
+        this.start_export_server_response === null
+            ? null
+            : this.start_export_server_response.path_adjusted_to_avoid_overwrite);
+
     return {
         last_request_sent: this.last_request_sent,
         progress_percent: 100 * (last_exported_time - this.start_time) / (this.end_time - this.start_time),
@@ -4926,6 +4954,8 @@ ExportManager.prototype.make_progress_object = function() {
         total_time: this.end_time - this.start_time,
         progress_frames: last_exported_frame,
         total_frames: Math.floor((this.end_time - this.start_time) * this.fps),
+        final_export_path: final_export_path,
+        path_adjusted_to_avoid_overwrite: path_adjusted_to_avoid_overwrite,
     };
 }
 
@@ -4985,6 +5015,10 @@ ExportManager.prototype.handle_server_response = function(data, status) {
         this.success(data, status);
         this.cleanup();
         return;
+    }
+
+    if (this.last_request_sent === "start_export") {
+        this.start_export_server_response = JSON.parse(data);
     }
 
     this.server_status = "ready";
