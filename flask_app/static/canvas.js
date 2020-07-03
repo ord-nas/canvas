@@ -3633,6 +3633,8 @@ function add_visibility_event(layer, action) {
     var export_progress_bar = null;
     var export_manager = null;
     var last_calculated_end = null;
+    var project_directory_contents = null;
+    var directory_browser = null;
 
     function begin_export_dialog() {
         // Infer the endpoint as 0.5 seconds after the end of the last event.
@@ -3658,7 +3660,34 @@ function add_visibility_event(layer, action) {
             last_calculated_end = end;
         }
 
-        export_setup_dialog.dialog("open");
+        // Try to list the project directory contents.
+        // Define what to do on open success or failure.
+        var success_fn = function(data, status) {
+            console.log("List project directory success!");
+            console.log(data);
+            console.log(status);
+            project_directory_contents = JSON.parse(data)["project_directory_contents"];
+            export_setup_dialog.dialog("open");
+        };
+        var error_fn = function(data, status) {
+            console.log("List project directory errored out!");
+            console.log(data);
+            console.log(status);
+            $("#export-info-message")
+                .removeClass("success-message")
+                .addClass("error-message")
+                .text("Server error listing projects; check console for details or try again.");
+            export_info_dialog.dialog("open");
+        };
+
+        // List project directory contents.
+        $.ajax({
+            type: "GET",
+            url: "../list_project_directory",
+            data: {},
+            success: success_fn,
+            error: error_fn,
+        });
     }
 
     function cancel_export() {
@@ -3667,6 +3696,17 @@ function add_visibility_event(layer, action) {
     }
 
     function start_export() {
+        // Try to get the filepath to export to.
+        var directory = directory_browser.getSelection();
+        if (directory === null) {
+            return;
+        }
+        var filename = $("#export-filename").val();
+        if (filename === "") {
+            return;
+        }
+        var filepath = directory === "" ? filename : directory + "/" + filename;
+
         // Reset the progress dialog.
         export_progress_bar.find(".ui-progressbar-value").css({
             "background": "#e9e9e9",
@@ -3690,7 +3730,6 @@ function add_visibility_event(layer, action) {
         playing = false;
 
         // Read params and start the export.
-        var filename = $("#export-filename").val();
         var fps = parseInt($("#export-fps").val());
         var start_time = parseFloat($("#export-start-time").val());
         var end_time = parseFloat($("#export-end-time").val());
@@ -3735,7 +3774,7 @@ function add_visibility_event(layer, action) {
             $("#export-progress-frames").text(`(${p.progress_frames} of approximately ${p.total_frames} frames)`);
         };
         export_manager = new ExportManager(
-            filename, fps, width, height, start_time, end_time,
+            filepath, fps, width, height, start_time, end_time,
             success_fn, error_fn, progress_fn);
         export_manager.do_export();
     }
@@ -3744,6 +3783,14 @@ function add_visibility_event(layer, action) {
         export_setup_dialog = $("#export-setup").dialog({
             autoOpen: false,
             modal: true,
+            open: function(event, ui) {
+                directory_browser = new SimpleDirectoryBrowser(
+                    "export-setup-directory",
+                    project_directory_contents,
+                    /*allow_select_directory=*/true,
+                    /*allow_select_file=*/false,
+                    /*initial_path=*/current_project_filepath);
+            },
             buttons: {
                 "Start Export": start_export,
                 "Cancel": function() {
@@ -3774,7 +3821,23 @@ function add_visibility_event(layer, action) {
             value: false,
         });
 
-        return [export_setup_dialog, export_progress_dialog];
+        export_info_dialog = $("#export-info").dialog({
+            autoOpen: false,
+            width: 600,
+            height: 180,
+            modal: true,
+            closeOnEscape: false,
+            open: function(event, ui) {
+                $(this).closest('.ui-dialog').find('.ui-dialog-titlebar-close').hide()
+            },
+            buttons: {
+                "Dismiss":  function() {
+                    export_info_dialog.dialog("close");
+                },
+            },
+        });
+
+        return [export_setup_dialog, export_progress_dialog, export_info_dialog];
     }
 
     return [make_export_dialogs, begin_export_dialog];
@@ -4000,7 +4063,6 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
             success: success_fn,
             error: error_fn,
         });
-
     }
 
     function begin_save() {

@@ -34,6 +34,7 @@
 	<div id="export-setup" title="Export Video">
 	    <form>
 		<fieldset>
+		    <div id="export-setup-directory" class="directory-browser"></div>
 		    Filename: <input type="text" id="export-filename" value="Video.avi" class="text ui-widget-content ui-corner-all" /><br/>
 		    FPS: <input type="text" id="export-fps" value="60" class="text ui-widget-content ui-corner-all"/><br/>
 		    Start time: <input type="text" id="export-start-time" value="0" class="text ui-widget-content ui-corner-all"/><br/>
@@ -48,6 +49,11 @@
 	    <div id="export-progress-frames"></div>
 	    <br/>
 	    <div id="export-progress-bar"></div>
+	</div>
+
+	<div id="export-info" title="Export Info">
+	    <br/>
+	    <div id="export-info-message"></div>
 	</div>
 
 	<div id="save-setup" title="Save Project As">

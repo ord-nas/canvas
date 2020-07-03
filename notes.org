@@ -216,4 +216,4 @@
 ** DONE Implement "Save As"
 ** DONE Implement "Open"
 ** TODO Implement "New"
-** TODO Implement basic folder navigation
+** DONE Implement basic folder navigation
