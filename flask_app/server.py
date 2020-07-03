@@ -139,8 +139,11 @@ def save_project():
     if ext == "":
         filename = filename + ".cnvs"
     path = os.path.join(PROJECT_PATH, filename)
+    adjustment_performed = False
     if overwrite != "true":
-        path = avoid_filename_conflicts(path)
+        new_path = avoid_filename_conflicts(path)
+        adjustment_performed = (new_path != path)
+        path = new_path
 
     try:
         print("About to save to: " + path)
@@ -150,7 +153,8 @@ def save_project():
         return '', 500
 
     return_payload = {
-        "final_project_path" : os.path.relpath(path, PROJECT_PATH)
+        "final_project_path" : os.path.relpath(path, PROJECT_PATH),
+        "path_adjusted_to_avoid_overwrite" : adjustment_performed
     }
 
     return json.dumps(return_payload), 200

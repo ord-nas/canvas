@@ -3978,7 +3978,10 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
             console.log("List project directory errored out!");
             console.log(data);
             console.log(status);
-            $("#save-progress-message").addClass("error-message").text("Server error listing projects; check console for details or try again.");
+            $("#save-progress-message")
+                .removeClass("success-message")
+                .addClass("error-message")
+                .text("Server error listing projects; check console for details or try again.");
             save_progress_dialog.dialog({
                 buttons: {
                     "Dismiss": function() {
@@ -4031,7 +4034,10 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
 
     function start_save_generic(filepath, overwrite) {
         // Reset the progress dialog.
-        $("#save-progress-message").removeClass("error-message").text("Writing project to disk, please wait...");
+        $("#save-progress-message")
+            .removeClass("success-message")
+            .removeClass("error-message")
+            .text("Writing project to disk, please wait...");
         save_progress_dialog.dialog({
             buttons: {
                 "Cancel": cancel_save,
@@ -4051,13 +4057,27 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
                 console.log("Save success!");
                 console.log(data);
                 console.log(status);
-                save_progress_dialog.dialog("close");
                 var payload = JSON.parse(data);
                 var project_filepath = payload.final_project_path;
                 if (typeof project_filepath !== "string" || project_filepath.length === 0) {
                     throw "Malformed response from server on save!";
                 }
                 setProjectFilepath(project_filepath);
+                if (payload.path_adjusted_to_avoid_overwrite) {
+                    $("#save-progress-message")
+                        .addClass("success-message")
+                        .removeClass("error-message")
+                        .text("Filename adjust to avoid overwrite conflict.");
+                    save_progress_dialog.dialog({
+                        buttons: {
+                            "Dismiss": function() {
+                                save_progress_dialog.dialog("close");
+                            },
+                        },
+                    });
+                } else {
+                    save_progress_dialog.dialog("close");
+                }
             }
             saving = false;
         };
@@ -4065,7 +4085,10 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
             console.log("Save errored out!");
             console.log(data);
             console.log(status);
-            $("#save-progress-message").addClass("error-message").text("Server error on save; check console for details or try again.");
+            $("#save-progress-message")
+                .removeClass("success-message")
+                .addClass("error-message")
+                .text("Server error on save; check console for details or try again.");
             save_progress_dialog.dialog({
                 buttons: {
                     "Dismiss": function() {
@@ -4163,7 +4186,10 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
             console.log("List project directory errored out!");
             console.log(data);
             console.log(status);
-            $("#open-progress-message").addClass("error-message").text("Server error listing projects; check console for details or try again.");
+            $("#open-progress-message")
+                .removeClass("success-message")
+                .addClass("error-message")
+                .text("Server error listing projects; check console for details or try again.");
             open_progress_dialog.dialog({
                 buttons: {
                     "Dismiss": function() {
@@ -4196,7 +4222,10 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
         }
 
         // Reset the progress dialog.
-        $("#open-progress-message").removeClass("error-message").text("Loading project from disk, please wait...");
+        $("#open-progress-message")
+            .removeClass("success-message")
+            .removeClass("error-message")
+            .text("Loading project from disk, please wait...");
         open_progress_dialog.dialog({
             buttons: {
                 "Cancel": cancel_open,
@@ -4228,7 +4257,10 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
             console.log("Open errored out!");
             console.log(data);
             console.log(status);
-            $("#open-progress-message").addClass("error-message").text("Server error on open; check console for details or try again.");
+            $("#open-progress-message")
+                .removeClass("success-message")
+                .addClass("error-message")
+                .text("Server error on open; check console for details or try again.");
             open_progress_dialog.dialog({
                 buttons: {
                     "Dismiss": function() {
