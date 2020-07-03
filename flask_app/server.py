@@ -13,6 +13,8 @@ app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 # Global paths.
 PROJECT_PATH = '/home/sandro/Documents/Canvas Projects/'
+VIDEO_FILE_REGEX = r'.*\.avi$'
+PROJECT_FILE_REGEX = r'.*\.cnvs$'
 
 def filename_with_version(filename, version):
     m = re.match(r'^(.*) \(([1-9][0-9]*)\)$', filename)
@@ -196,6 +198,8 @@ def list_project_directory():
 
     return_payload = {
         "project_directory_contents": directory_info,
+        "video_file_regex": VIDEO_FILE_REGEX,
+        "project_file_regex": PROJECT_FILE_REGEX,
     }
 
     return json.dumps(return_payload), 200

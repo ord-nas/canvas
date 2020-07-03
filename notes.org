@@ -206,7 +206,7 @@
 ** TODO Figure out why exporting is so slow and try to speed it up
 *** Especially when there are large images involved
 ** DONE Fix bug where hidden layers still show up in exported video.
-** TODO Implement forced filename extensions
+** DONE Implement forced filename extensions
 * Save/Load
 ** DONE Implement basic functionality to serialize/deserialize to/from JSON
 *** DONE Add a writeup about this, since it's non-trivial
@@ -219,4 +219,4 @@
 ** TODO Implement "New"
 ** DONE Implement basic folder navigation
 ** TODO Implement forced filename extensions
-** TODO Implement file filtering based on extension
+** DONE Implement file filtering based on extension

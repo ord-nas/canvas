@@ -3634,6 +3634,7 @@ function add_visibility_event(layer, action) {
     var export_manager = null;
     var last_calculated_end = null;
     var project_directory_contents = null;
+    var file_regex = "";
     var directory_browser = null;
 
     function begin_export_dialog() {
@@ -3666,7 +3667,9 @@ function add_visibility_event(layer, action) {
             console.log("List project directory success!");
             console.log(data);
             console.log(status);
-            project_directory_contents = JSON.parse(data)["project_directory_contents"];
+            var payload = JSON.parse(data);
+            project_directory_contents = payload.project_directory_contents;
+            file_regex = payload.video_file_regex;
             export_setup_dialog.dialog("open");
         };
         var error_fn = function(data, status) {
@@ -3806,7 +3809,8 @@ function add_visibility_event(layer, action) {
                     project_directory_contents,
                     /*allow_select_directory=*/true,
                     /*allow_select_file=*/false,
-                    /*initial_path=*/current_project_filepath);
+                    /*initial_path=*/current_project_filepath,
+                    /*file_regex=*/file_regex);
             },
             buttons: {
                 "Start Export": start_export,
@@ -3860,13 +3864,26 @@ function add_visibility_event(layer, action) {
     return [make_export_dialogs, begin_export_dialog];
 })();
 
-function SimpleDirectoryBrowser(element_id, directory_contents, allow_select_directory, allow_select_file, initial_path = "") {
+function SimpleDirectoryBrowser(element_id, directory_contents, allow_select_directory, allow_select_file, initial_path = "", file_regex="") {
     this.directory_contents = {};
-    // Add a leading / to each non-empty directory name, to make processing more uniform.
     for (var key in directory_contents) {
         var val = directory_contents[key];
+
+        // Add a leading / to each non-empty directory name, to make processing more uniform.
         key = this.normalizePath(key);
-        this.directory_contents[key] = val;
+
+        // File out files that don't match the regex.
+        var files = [];
+        for (var file of val.files) {
+            if (file.match(file_regex) !== null) {
+                files.push(file);
+            }
+        }
+
+        this.directory_contents[key] = {
+            "directories": val.directories,
+            "files": files,
+        };
     }
 
     this.allow_select_directory = allow_select_directory;
@@ -4042,6 +4059,7 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
     var save_progress_dialog = null;
     var saving = false;
     var project_directory_contents = null;
+    var file_regex = "";
     var directory_browser = null;
 
     function begin_save_as_dialog() {
@@ -4051,7 +4069,9 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
             console.log("List project directory success!");
             console.log(data);
             console.log(status);
-            project_directory_contents = JSON.parse(data)["project_directory_contents"];
+            var payload = JSON.parse(data);
+            project_directory_contents = payload.project_directory_contents;
+            file_regex = payload.project_file_regex;
             save_setup_dialog.dialog("open");
         };
         var error_fn = function(data, status) {
@@ -4203,7 +4223,8 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
                     project_directory_contents,
                     /*allow_select_directory=*/true,
                     /*allow_select_file=*/false,
-                    /*initial_path=*/current_project_filepath);
+                    /*initial_path=*/current_project_filepath,
+                    /*file_regex=*/file_regex);
                 var filename = "Project.cnvs";
                 if (current_project_filepath !== null) {
                     var parts = current_project_filepath.split("/");
@@ -4249,6 +4270,7 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
     var open_progress_dialog = null;
     var opening = false;
     var project_directory_contents = null;
+    var file_regex = "";
     var directory_browser = null;
 
     function begin_open_dialog() {
@@ -4258,7 +4280,9 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
             console.log("List project directory success!");
             console.log(data);
             console.log(status);
-            project_directory_contents = JSON.parse(data)["project_directory_contents"];
+            var payload = JSON.parse(data);
+            project_directory_contents = payload.project_directory_contents;
+            file_regex = payload.project_file_regex;
             open_setup_dialog.dialog("open");
         };
         var error_fn = function(data, status) {
@@ -4373,7 +4397,8 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
                     project_directory_contents,
                     /*allow_select_directory=*/false,
                     /*allow_select_file=*/true,
-                    /*initial_path=*/current_project_filepath);
+                    /*initial_path=*/current_project_filepath,
+                    /*file_regex=*/file_regex);
             },
             buttons: {
                 "Open": start_open,
