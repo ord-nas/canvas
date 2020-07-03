@@ -3780,25 +3780,46 @@ function add_visibility_event(layer, action) {
     return [make_export_dialogs, begin_export_dialog];
 })();
 
-function SimpleDirectoryBrowser(element_id, directory_contents, allow_select_directory, allow_select_file) {
+function SimpleDirectoryBrowser(element_id, directory_contents, allow_select_directory, allow_select_file, initial_path = "") {
     this.directory_contents = {};
     // Add a leading / to each non-empty directory name, to make processing more uniform.
     for (var key in directory_contents) {
         var val = directory_contents[key];
-        if (key !== "") {
-            key = "/" + key;
-        }
+        key = this.normalizePath(key);
         this.directory_contents[key] = val;
     }
 
     this.allow_select_directory = allow_select_directory;
     this.allow_select_file = allow_select_file;
 
-    this.current_path = "";
+    if (typeof initial_path !== "string") {
+        initial_path = "";
+    }
+    this.current_path = this.normalizePath(this.largestValidDirectoryPrefix(initial_path));
 
     this.jElement = $("#" + element_id).addClass("directory-browser");
     this.updateUI();
 }
+
+SimpleDirectoryBrowser.prototype.normalizePath = function(path) {
+    if (path === "" || path.startsWith("/")) {
+        return path;
+    }
+    return "/" + path;
+};
+
+SimpleDirectoryBrowser.prototype.largestValidDirectoryPrefix = function(initial_path) {
+    var valid_path = "";
+    var parts = initial_path.split("/");
+    for (var i = 0; i < parts.length; i++) {
+        var path = parts.slice(0, i+1).join("/");
+        if (!(this.normalizePath(path) in this.directory_contents)) {
+            break;
+        }
+        valid_path = path;
+    }
+    return valid_path;
+};
 
 SimpleDirectoryBrowser.prototype.updateUI = function() {
     this.jElement.empty();
@@ -4184,7 +4205,8 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
                     "open-setup-directory",
                     project_directory_contents,
                     /*allow_select_directory=*/false,
-                    /*allow_select_file=*/true);
+                    /*allow_select_file=*/true,
+                    /*initial_path=*/current_project_filepath);
             },
             buttons: {
                 "Open": start_open,
