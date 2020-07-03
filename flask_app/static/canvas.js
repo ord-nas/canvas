@@ -67,6 +67,9 @@ function resetState() {
 
     // Reset displayed project time.
     $("#time").val(current_project_time / 1000);
+
+    // Reset to an unsaved project.
+    setProjectFilepath(null);
 }
 
 function serializeState() {
@@ -4054,6 +4057,41 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
 };
 
 // TODO: figure out proper encapsulation
+[make_new_dialog, begin_new_dialog] = (function() {
+    var new_confirm_dialog = null;
+
+    function begin_new_dialog() {
+        new_confirm_dialog.dialog("open");
+    }
+
+    function start_new() {
+        new_confirm_dialog.dialog("close");
+        resetState();
+    }
+
+    function make_new_dialog() {
+        new_confirm_dialog = $("#new-confirm").dialog({
+            autoOpen: false,
+            width: 400,
+            modal: true,
+            buttons: {
+                "Yes": start_new,
+                "Cancel": function() {
+                    new_confirm_dialog.dialog("close");
+                },
+            },
+        });
+        new_confirm_dialog.find("form").on("submit", function( event ) {
+            event.preventDefault();
+        });
+
+        return new_confirm_dialog;
+    }
+
+    return [make_new_dialog, begin_new_dialog];
+})();
+
+// TODO: figure out proper encapsulation
 [make_save_dialogs, begin_save_as_dialog, begin_save] = (function() {
     var save_setup_dialog = null;
     var save_progress_dialog = null;
@@ -5235,6 +5273,7 @@ $(document).ready(function () {
     $("#stop").on("click", stop);
     $("#go").on("click", go);
     $("#export_dialog_button").on("click", begin_export_dialog);
+    $("#new_project").on("click", begin_new_dialog);
     $("#save_project").on("click", begin_save);
     $("#save_project_as").on("click", begin_save_as_dialog);
     $("#open_project").on("click", begin_open_dialog);
@@ -5313,7 +5352,8 @@ $(document).ready(function () {
     // Set up the export video dialog
     make_export_dialogs();
 
-    // Set up the save/open dialogs
+    // Set up the new/save/open dialogs
+    make_new_dialog();
     make_save_dialogs();
     make_open_dialogs();
 

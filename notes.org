@@ -216,7 +216,7 @@
 ** DONE Implement "Save"
 ** DONE Implement "Save As"
 ** DONE Implement "Open"
-** TODO Implement "New"
+** DONE Implement "New"
 ** DONE Implement basic folder navigation
 ** DONE Implement forced filename extensions
 ** DONE Implement file filtering based on extension
