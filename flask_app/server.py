@@ -39,8 +39,8 @@ class ExportManager(object):
         self.export_dir = export_dir
         self.video_writer = None
     def start_export(self, filename, fps, frame_width, frame_height):
-        (_, ext) = os.path.splitext(filename)
-        if ext == "":
+        if not re.match(VIDEO_FILE_REGEX, filename):
+            # Default to .avi extension if filename is not a valid video file.
             filename = filename + ".avi"
         path = os.path.join(self.export_dir, filename)
         new_path = avoid_filename_conflicts(path)
@@ -143,8 +143,8 @@ def save_project():
     overwrite = request.form['overwrite']
 
     # Construct the full path to write to.
-    (_, ext) = os.path.splitext(filename)
-    if ext == "":
+    if not re.match(PROJECT_FILE_REGEX, filename):
+        # Default to .cnvs extension if filename is not a valid project file.
         filename = filename + ".cnvs"
     path = os.path.join(PROJECT_PATH, filename)
     adjustment_performed = False
@@ -172,9 +172,6 @@ def open_project():
     filename = request.form['project_filepath']
 
     # Construct the full path to read from.
-    (_, ext) = os.path.splitext(filename)
-    if ext == "":
-        filename = filename + ".cnvs"
     path = os.path.join(PROJECT_PATH, filename)
 
     try:

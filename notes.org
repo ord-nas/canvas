@@ -218,5 +218,5 @@
 ** DONE Implement "Open"
 ** TODO Implement "New"
 ** DONE Implement basic folder navigation
-** TODO Implement forced filename extensions
+** DONE Implement forced filename extensions
 ** DONE Implement file filtering based on extension
