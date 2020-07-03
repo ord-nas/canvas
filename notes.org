@@ -220,3 +220,4 @@
 ** DONE Implement basic folder navigation
 ** DONE Implement forced filename extensions
 ** DONE Implement file filtering based on extension
+** TODO Load all required fonts
