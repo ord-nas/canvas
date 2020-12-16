@@ -28,6 +28,7 @@ var viewport_matrix = getIdentityMatrix();
 var last_viewport_matrix = null;
 var tick_callbacks = {};
 var layers = [];
+var audio_layers = [];
 var next_layer_key = 1;
 var current_layer = null;
 var current_action = null;
@@ -1649,16 +1650,21 @@ function tick() {
     if (current_action && current_layer) {
         current_action.tick();
     }
-    for (var i = 0; i < layers.length; i++) {
-        draw(layers[i]);
-        if (playing || changed || layers[i].timeline.needs_redraw) {
+    for (var layer of layers) {
+        draw(layer);
+        if (playing || changed || layer.timeline.needs_redraw) {
             // We need "playing or changed" instead of just "changed", because in the case
             // of mouse moves in the canvas area, the mouse move will update the current
             // project time, and apparently that happens at about the same time as this
             // tick, because in that case our call to set_project_time will see no difference,
             // so we will see changed === false. That will cause us not to update when we
             // should.
-            layers[i].timeline.draw();
+            layer.timeline.draw();
+        }
+    }
+    for (var layer of audio_layers) {
+        if (playing || changed || layer.timeline.needs_redraw) {
+            layer.timeline.draw();
         }
     }
     if (playing) {
@@ -4607,20 +4613,23 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
 
 function resize_timelines() {
     var min_target_width = null;
-    for (var layer of layers) {
-        var total_width = $(layer.timeline.canvas).parent().width();
-        var header_width = $(layer.timeline.canvas).parent().parent().find(".layerhandle-header").width();
-        var target_width = total_width - header_width - 50;
-        // TODO: Handle case where target width is less than zero.
-        if (min_target_width === null || target_width < min_target_width) {
-            min_target_width = target_width;
+    for (var layer_set of [layers, audio_layers]) {
+        for (var layer of layer_set) {
+            var total_width = $(layer.timeline.canvas).parent().width();
+            var header_width = $(layer.timeline.canvas).parent().parent().find(".layerhandle-header").width();
+            var target_width = total_width - header_width - 50;
+            // TODO: Handle case where target width is less than zero.
+            if (min_target_width === null || target_width < min_target_width) {
+                min_target_width = target_width;
+            }
         }
     }
-    if (min_target_width === null) {
-        // There are no layers!
-        return;
-    }
     for (var layer of layers) {
+        layer.timeline.canvas.width = min_target_width;
+        layer.timeline.needs_redraw = true;
+
+    }
+    for (var layer of audio_layers) {
         layer.timeline.canvas.width = min_target_width;
         layer.timeline.needs_redraw = true;
     }
@@ -4781,6 +4790,21 @@ function create_layer_handle(layer) {
     if (layer.background_image !== null) {
         element.find('.layerhandle-contents').addClass('image-layer');
     }
+    layer.timeline.needs_redraw = true;
+    return element;
+}
+
+function create_audio_layer_handle(layer) {
+    var element = $(`
+                    <div class="layerhandle-contents audio-layer">
+                    <span class="layerhandle-header">
+                    <span class='layer-title'></span>
+                    </span>
+                    <div class='layer-timeline' style="display: flex; justify-content: flex-end"></div>
+                    </div>`);
+    element.attr('id', layer.handle_id);
+    element.find('.layer-title').text(layer.title);
+    element.find('.layer-timeline').append(layer.timeline.canvas);
     layer.timeline.needs_redraw = true;
     return element;
 }
@@ -5449,6 +5473,11 @@ $(document).ready(function () {
         max: 25,
         value: 1,
     });
+
+    // Create the audio layer.
+    audio_layers = [];
+    audio_layers.push(new AudioLayer("Audio", "1"));
+    $( "#audio_selector" ).append(create_audio_layer_handle(audio_layers[0]));
 
     // Create the layers
     layers = [];

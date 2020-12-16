@@ -52,13 +52,19 @@ li.mjs-nestedSortable-collapsed.mjs-nestedSortable-hovering div {
     background: #EBEBEB;
 }
 .layerhandle-contents.image-layer {
-    background: #ce9fc0;
+    background: #d1edc7;
+}
+.layerhandle-contents.audio-layer {
+    background: #edc7ed;
 }
 .layerhandle-contents canvas {
     cursor: default;
 }
 .layer-title {
     vertical-align: middle;
+}
+.audio-layer .layer-title {
+    margin-left: 25px;
 }
 #rename-layer label, #rename-layer input { display:block; }
 #rename-layer input.text { margin-bottom:0px; width:95%; padding: .4em; }
