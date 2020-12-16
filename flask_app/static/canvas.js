@@ -1340,6 +1340,42 @@ Layer.prototype.get_visibility_at_time = function(time) {
 
 // END LAYER DEFINITION
 
+// START AUDIOLAYER DEFINITION
+
+function AudioLayer(title, id) {
+    LayerBase.call(this, title, id);
+    this.audio_events = [];
+    this.audio_buckets = {};
+}
+AudioLayer.prototype = Object.create(LayerBase.prototype);
+AudioLayer.prototype.constructor = AudioLayer;
+
+AudioLayer.prototype.expected_properties = new Set([
+    "id", "title", "handle_id", "timeline", "audio_buckets", "audio_events",
+]);
+
+// TODO: Define AudioLayer.prototype.toJSON().
+// TODO: Define AudioLayer.prototype.reifyFromJSON().
+// TODO: Define AudioLayer.prototype.buildBuckets().
+
+AudioLayer.prototype.event_arrays = function() {
+    return [
+        this.audio_events,
+    ];
+}
+
+AudioLayer.prototype.event_bucket_arrays = function() {
+    return [
+        this.audio_buckets,
+    ];
+}
+
+AudioLayer.prototype.get_visibility_at_time = function(time) {
+    return true;
+}
+
+// END AUDIOLAYER DEFINITION
+
 // Don't call this directly. Call remove_events, and pass an array of one event.
 function remove_event_impl(event, buckets, arr) {
     var index = arr.indexOf(event);
@@ -2802,6 +2838,45 @@ VisibilityEvent.prototype.clone = function() {
 }
 
 VisibilityEvent.prototype.reverse = function() {}
+
+// AUDIO
+
+function AudioEvent(audio_buffer, start, seq_id, layer) {
+    this.audio_buffer = audio_buffer;
+    this.start = start;
+    this.seq_id = seq_id;
+    this.layer = layer;
+    this.rank = null;
+}
+
+// TODO: Define AudioEvent.prototype.expected_properties.
+// TODO: Define AudioEvent.prototype.toJSON().
+// TODO: Define AudioEvent.prototype.reifyFromJSON().
+// TODO: Allow actually playing audio events.
+
+AudioEvent.prototype.begin = function() {
+    return this.start;
+}
+
+AudioEvent.prototype.end = function() {
+    return this.start + this.audio_buffer.duration;
+}
+
+AudioEvent.prototype.shallow_copy = function() {
+    var cpy = Object.create(this.__proto__);
+    Object.assign(cpy, this);
+    return cpy;
+}
+
+AudioEvent.prototype.clone = function() {
+    // TODO: this shares the underlying audio_buffer rather than copying it.
+    // Think about how this interacts with serialization.
+    return new AudioEvent(this.audio_buffer, this.start, current_seq_id++, this.layer);
+}
+
+AudioEvent.prototype.reverse = function() {
+    // TODO: Maybe prevent this in UI and throw some kind of error here?
+}
 
 // TRANSFORM LAYER SINK
 
