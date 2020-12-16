@@ -1080,19 +1080,74 @@ Timeline.prototype.recompute_max_rank = function() {
 
 // END TIMELINE DEFINITION
 
-// START LAYER DEFINITION
+// START LAYERBASE DEFINITION
 
-function Layer(title, id, background_image_url = null) {
+function LayerBase(title, id) {
     this.id = "layer-" + id;
     this.title = title;
     this.handle_id = "layerhandle_" + id;
+
+    this.timeline = new Timeline(this);
+}
+
+LayerBase.prototype.event_arrays = function() {
+    // MUST BE OVERRIDEN
+    console.log("Error: base event_arrays called!");
+    return [];
+}
+
+LayerBase.prototype.event_bucket_arrays = function() {
+    // MUST BE OVERRIDEN
+    console.log("Error: base event_bucket_arrays called!");
+    return [];
+}
+
+LayerBase.prototype.get_max_rank = function() {
+    var accumulate_max_rank = function(acc, value) {
+        if (value.rank !== null && value.rank > acc) {
+            return value.rank;
+        }
+        return acc;
+    };
+    var max_rank = 0;
+    for (event_array of this.event_arrays()) {
+        max_rank = event_array.reduce(accumulate_max_rank, max_rank);
+    }
+    return max_rank;
+}
+
+LayerBase.prototype.events_in_time_range = function(start, end) {
+    var in_range = new Set();
+    var start_bucket = Math.floor(start / bucket_size);
+    var end_bucket = Math.floor(end / bucket_size);
+    for (var index = start_bucket; index <= end_bucket; ++index) {
+        for (var buckets of this.event_bucket_arrays()) {
+            if (!(index in buckets)) {
+                continue;
+            }
+            for (var event of buckets[index]) {
+                if (event.begin() > end ||
+                    event.end() < start) {
+                    continue;
+                }
+                in_range.add(event);
+            }
+        }
+    }
+    return in_range;
+}
+
+// END LAYERBASE DEFINITION
+
+// START LAYER DEFINITION
+
+function Layer(title, id, background_image_url = null) {
+    LayerBase.call(this, title, id);
     this.matrices = [getIdentityMatrix()];
     this.visibilities = [true];
     this.child_index = null;
     this.ancestors = [this];
     this.children = [];
-
-    this.timeline = new Timeline(this);
 
     this.last_draw = null;
     this.last_transform = null;
@@ -1118,6 +1173,8 @@ function Layer(title, id, background_image_url = null) {
 
     this.makeCanvasAndCtx();
 }
+Layer.prototype = Object.create(LayerBase.prototype);
+Layer.prototype.constructor = Layer;
 
 Layer.prototype.expected_properties = new Set([
     "id", "canvas", "title", "handle_id", "ctx", "matrices", "visibilities", "child_index", "ancestors", "children", "timeline", "last_draw",
@@ -1171,6 +1228,22 @@ Layer.prototype.reifyFromJSON = function() {
     // Rebuild some properties that need to be created fresh.
     this.buildBuckets();
     this.makeCanvasAndCtx();
+}
+
+Layer.prototype.event_arrays = function() {
+    return [
+        this.strokes,
+        this.transforms,
+        this.visibility_events,
+    ];
+}
+
+Layer.prototype.event_bucket_arrays = function() {
+    return [
+        this.stroke_buckets,
+        this.transform_buckets,
+        this.visibility_buckets,
+    ];
 }
 
 Layer.prototype.makeCanvasAndCtx = function() {
@@ -1239,41 +1312,6 @@ Layer.prototype.finalize_event = function(event) {
     this.timeline.assign_rank(event);
     // Update timeline to reflect new event
     this.timeline.needs_redraw = true;
-}
-
-Layer.prototype.get_max_rank = function() {
-    var accumulate_max_rank = function(acc, value) {
-        if (value.rank !== null && value.rank > acc) {
-            return value.rank;
-        }
-        return acc;
-    };
-    return Math.max(this.strokes.reduce(accumulate_max_rank, 0),
-                    this.transforms.reduce(accumulate_max_rank, 0),
-                    this.visibility_events.reduce(accumulate_max_rank, 0));
-}
-
-Layer.prototype.events_in_time_range = function(start, end) {
-    var in_range = new Set();
-    var start_bucket = Math.floor(start / bucket_size);
-    var end_bucket = Math.floor(end / bucket_size);
-    for (var index = start_bucket; index <= end_bucket; ++index) {
-        for (var buckets of [this.stroke_buckets,
-                             this.transform_buckets,
-                             this.visibility_buckets]) {
-            if (!(index in buckets)) {
-                continue;
-            }
-            for (var event of buckets[index]) {
-                if (event.begin() > end ||
-                    event.end() < start) {
-                    continue;
-                }
-                in_range.add(event);
-            }
-        }
-    }
-    return in_range;
 }
 
 Layer.prototype.get_visibility_at_time = function(time) {
