@@ -1431,11 +1431,7 @@ function remove_events(events) {
 // Don't call this directly. Call add_events, and pass an array of one event.
 function add_event_impl(event, buckets, arr) {
     arr.push(event);
-    var start_bucket = Math.floor(event.begin() / bucket_size);
-    var end_bucket = Math.floor(event.end() / bucket_size);
-    for (var bucket = start_bucket; bucket <= end_bucket; bucket++) {
-        addToBucket(buckets, bucket, event);
-    }
+    addToAllRelevantBuckets(event, buckets);
     event.rank = null;
     event.layer.finalize_event(event);
 }
