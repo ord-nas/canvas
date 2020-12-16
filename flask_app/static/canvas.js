@@ -1102,6 +1102,12 @@ LayerBase.prototype.event_bucket_arrays = function() {
     return [];
 }
 
+LayerBase.prototype.finalize_event = function(event) {
+    this.timeline.assign_rank(event);
+    // Update timeline to reflect new event
+    this.timeline.needs_redraw = true;
+}
+
 LayerBase.prototype.get_max_rank = function() {
     var accumulate_max_rank = function(acc, value) {
         if (value.rank !== null && value.rank > acc) {
@@ -1306,12 +1312,6 @@ Layer.prototype.get_temp_canvas = function() {
         this.reset_temp_canvas();
     }
     return this.temp_canvas;
-}
-
-Layer.prototype.finalize_event = function(event) {
-    this.timeline.assign_rank(event);
-    // Update timeline to reflect new event
-    this.timeline.needs_redraw = true;
 }
 
 Layer.prototype.get_visibility_at_time = function(time) {
