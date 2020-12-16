@@ -383,27 +383,7 @@ Timeline.prototype.get_max_y_offset = function() {
 }
 
 Timeline.prototype.events_in_time_range = function(start, end) {
-    var in_view = new Set();
-    var start_bucket = Math.floor(start / bucket_size);
-    var end_bucket = Math.floor(end / bucket_size);
-    for (var index = start_bucket; index <= end_bucket; ++index) {
-        for (var buckets of [this.layer.stroke_buckets,
-                             this.layer.transform_buckets,
-                             this.layer.visibility_buckets]) {
-            if (!(index in buckets)) {
-                continue;
-            }
-            for (var event of buckets[index]) {
-                if (event.begin() > end ||
-                    event.end() < start) {
-                    continue;
-                }
-                in_view.add(event);
-            }
-        }
-    }
-
-    return in_view;
+    return this.layer.events_in_time_range(start, end);
 }
 
 Timeline.prototype.events_in_view = function() {
@@ -411,30 +391,7 @@ Timeline.prototype.events_in_view = function() {
 }
 
 Timeline.prototype.get_hidden_sections = function() {
-    var start_bucket = Math.floor(Timeline.start / bucket_size);
-    var end_bucket = Math.floor(Timeline.end / bucket_size);
-
-    // First find the state before
-    var visible_before = true; // default if we can't find any events
-    var index = start_bucket;
-    while (index >= 0) {
-        if (index in this.layer.visibility_buckets) {
-            var latest_event = null;
-            for (var event of this.layer.visibility_buckets[index]) {
-                if (event.time > Timeline.start) {
-                    continue;
-                }
-                if (latest_event === null || compare_events(event, latest_event) == 1) {
-                    latest_event = event;
-                }
-            }
-            if (latest_event !== null) {
-                visible_before = latest_event.is_visible();
-                break;
-            }
-        }
-        index--;
-    }
+    var visible_before = this.layer.get_visibility_at_time(Timeline.start);
 
     // All events in view
     var all_in_view = this.events_in_view();
@@ -1118,15 +1075,7 @@ Timeline.prototype.dblclick = function(event) {
 }
 
 Timeline.prototype.recompute_max_rank = function() {
-    var accumulate_max_rank = function(acc, value) {
-        if (value.rank !== null && value.rank > acc) {
-            return value.rank;
-        }
-        return acc;
-    };
-    this.max_rank = Math.max(this.layer.strokes.reduce(accumulate_max_rank, 0),
-                             this.layer.transforms.reduce(accumulate_max_rank, 0),
-                             this.layer.visibility_events.reduce(accumulate_max_rank, 0));
+    this.max_rank = this.layer.get_max_rank();
 }
 
 // END TIMELINE DEFINITION
@@ -1290,6 +1239,65 @@ Layer.prototype.finalize_event = function(event) {
     this.timeline.assign_rank(event);
     // Update timeline to reflect new event
     this.timeline.needs_redraw = true;
+}
+
+Layer.prototype.get_max_rank = function() {
+    var accumulate_max_rank = function(acc, value) {
+        if (value.rank !== null && value.rank > acc) {
+            return value.rank;
+        }
+        return acc;
+    };
+    return Math.max(this.strokes.reduce(accumulate_max_rank, 0),
+                    this.transforms.reduce(accumulate_max_rank, 0),
+                    this.visibility_events.reduce(accumulate_max_rank, 0));
+}
+
+Layer.prototype.events_in_time_range = function(start, end) {
+    var in_range = new Set();
+    var start_bucket = Math.floor(start / bucket_size);
+    var end_bucket = Math.floor(end / bucket_size);
+    for (var index = start_bucket; index <= end_bucket; ++index) {
+        for (var buckets of [this.stroke_buckets,
+                             this.transform_buckets,
+                             this.visibility_buckets]) {
+            if (!(index in buckets)) {
+                continue;
+            }
+            for (var event of buckets[index]) {
+                if (event.begin() > end ||
+                    event.end() < start) {
+                    continue;
+                }
+                in_range.add(event);
+            }
+        }
+    }
+    return in_range;
+}
+
+Layer.prototype.get_visibility_at_time = function(time) {
+    var visible = true; // default if we can't find any events
+    var index = Math.floor(time / bucket_size);
+    while (index >= 0) {
+        if (index in this.visibility_buckets) {
+            var latest_event = null;
+            for (var event of this.visibility_buckets[index]) {
+                if (event.time > time) {
+                    continue;
+                }
+                if (latest_event === null || compare_events(event, latest_event) == 1) {
+                    latest_event = event;
+                }
+            }
+            if (latest_event !== null) {
+                visible = latest_event.is_visible();
+                break;
+            }
+        }
+        index--;
+    }
+    return visible;
 }
 
 // END LAYER DEFINITION
