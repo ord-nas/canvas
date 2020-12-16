@@ -5380,5 +5380,72 @@ $(document).ready(function () {
     // moving layers around.
     $( window ).resize(resize_timelines);
 
+    // Set up sound recording stuff.
+    {
+        const constraints = { audio: true };
+
+        let onSuccess = function(stream) {
+            const mediaRecorder = new MediaRecorder(stream);
+            var recording = false;
+            var chunks = [];
+
+            var context = new AudioContext();
+
+            $("#record_button").on("click", function() {
+                if (!recording) {
+                    recording = true;
+                    mediaRecorder.start();
+                    console.log(mediaRecorder.state);
+                    console.log("recorder started");
+                } else {
+                    recording = false;
+                    mediaRecorder.stop();
+                    console.log(mediaRecorder.state);
+                    console.log("recorder stopped");
+                }
+            });
+
+
+            mediaRecorder.onstop = function(e) {
+                console.log("data available after MediaRecorder.stop() called.");
+
+                // Store audio blob.
+                const blob = new Blob(chunks, { 'type' : 'audio/ogg; codecs=opus' });
+                chunks = [];
+                blob.arrayBuffer().then(arrayBuffer => {
+                    // Convert to AudioBuffer.
+                    context.decodeAudioData(arrayBuffer).then(audioBuffer => {
+
+                        const clipName = prompt('Enter a name for your sound clip?','My unnamed clip');
+
+                        // Make a clip button that plays back the audio.
+                        const clipButton = document.createElement('button');
+                        clipButton.textContent = clipName;
+                        clipButton.onclick = function(e) {
+                            var source = context.createBufferSource();
+                            source.buffer = audioBuffer;
+                            source.connect(context.destination);
+                            source.start(0);
+                        };
+
+                        // Add the clip button.
+                        $("#sound_clips").append(clipButton);
+                    });
+                });
+            }
+
+
+            mediaRecorder.ondataavailable = function(e) {
+                chunks.push(e.data);
+            }
+        }
+
+        let onError = function(err) {
+            console.log('The following error occured: ' + err);
+        }
+
+        navigator.mediaDevices.getUserMedia(constraints).then(onSuccess, onError);
+    }
+
     window.requestAnimationFrame(tick);
 });
