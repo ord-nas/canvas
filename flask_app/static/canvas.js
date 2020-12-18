@@ -34,6 +34,7 @@ var current_layer = null;
 var current_action = null;
 var current_project_filepath = null;
 var global_audio_context = null;
+var global_audio_recorder = null;
 
 function resetGlobals() {
     playing = false;
@@ -301,6 +302,8 @@ function makeJSONReviver(callback_vector) {
     }
 }
 
+// Global audio functions.
+
 function get_audio_context() {
     if (global_audio_context === null) {
         global_audio_context = new AudioContext();
@@ -308,6 +311,42 @@ function get_audio_context() {
     return global_audio_context;
 }
 
+function stop_audio_recording() {
+    if (global_audio_recorder !== null) {
+        global_audio_recorder.stop();
+        $("#record_button").html("Record");
+    }
+}
+
+function start_audio_recording() {
+    if (global_audio_recorder !== null) {
+        if (!playing) {
+            play();
+        }
+        global_audio_recorder.start();
+        $("#record_button").html("Stop");
+    }
+}
+
+function toggle_audio_recording() {
+    if (global_audio_recorder === null) {
+        return;
+    }
+    if (global_audio_recorder.recording) {
+        stop_audio_recording();
+    } else {
+        start_audio_recording();
+    }
+}
+
+function add_audio_event(audio_buffer, recording_start_time) {
+    var layer = audio_layers[0];
+    var event = new AudioEvent(audio_buffer, recording_start_time, current_seq_id++, layer);
+
+    layer.audio_events.push(event);
+    addToAllRelevantBuckets(event, layer.audio_buckets);
+    layer.finalize_event(event);
+}
 
 // Start AudioRecorder
 
@@ -316,6 +355,7 @@ function AudioRecorder() {
     this.callbacks = [];
     this.chunks = [];
     this.media_recorder = null;
+    this.recording_start_time = null;
 
     var self = this;
     let onSuccess = function(stream) {
@@ -329,7 +369,7 @@ function AudioRecorder() {
                 // Convert to AudioBuffer.
                 get_audio_context().decodeAudioData(arrayBuffer).then(audioBuffer => {
                     for (var callback of self.callbacks) {
-                        callback.call(self, audioBuffer);
+                        callback.call(self, audioBuffer, self.recording_start_time);
                     }
                 });
             });
@@ -354,7 +394,9 @@ AudioRecorder.prototype.add_callback = function(callback) {
 
 AudioRecorder.prototype.start = function() {
     if (!this.recording && this.media_recorder !== null) {
+        set_current_project_time();
         this.recording = true;
+        this.recording_start_time = current_project_time;
         this.media_recorder.start();
     }
 }
@@ -520,8 +562,13 @@ Timeline.prototype.get_colour = function(event) {
         return 'blue';
     } else if (event instanceof Transform) {
         return 'orange';
-    } else {
+    } else if (event instanceof VisibilityEvent) {
         return 'green';
+    } else if (event instanceof AudioEvent) {
+        return 'purple';
+    } else {
+        console.log("Error: unrecognized event type");
+        return '';
     }
 }
 
@@ -670,6 +717,9 @@ Timeline.prototype.scroll = function(event) {
         for (var layer of layers) {
             layer.timeline.needs_redraw = true;
         }
+        for (var layer of audio_layers) {
+            layer.timeline.needs_redraw = true;
+        }
     } else if (event.ctrlKey) {
         var pos = getMousePos(event, this.canvas);
         var time = pos.x / this.canvas.width * (Timeline.end - Timeline.start) + Timeline.start;
@@ -681,6 +731,9 @@ Timeline.prototype.scroll = function(event) {
             Timeline.start = new_start;
             Timeline.end = new_end;
             for (var layer of layers) {
+                layer.timeline.needs_redraw = true;
+            }
+            for (var layer of audio_layers) {
                 layer.timeline.needs_redraw = true;
             }
         }
@@ -722,6 +775,8 @@ function move_event_to_layer(event, layer) {
         return;
     }
     if (event instanceof VisibilityEvent) {
+        event.layer = layer;
+    } else if (event instanceof AudioEvent) {
         event.layer = layer;
     } else if (event instanceof Stroke) {
         // We make the (kind of arbitrary) choice that when you move events between layers,
@@ -832,6 +887,8 @@ function get_deltas(e) {
         return e.deltas;
     } else if (e instanceof VisibilityEvent) {
         return []; // Nothing to scale!
+    } else if (e instanceof AudioEvent) {
+        return []; // Nothing to scale!
     } else {
         console.log("ERROR: Tried to scale, but got event in selection of unknown type");
         return null;
@@ -865,7 +922,7 @@ function timeline_allow_interlayer(e, timeline) {
         if (event.layer !== timeline.layer) {
             return false;
         }
-        if (event instanceof Transform) {
+        if (event instanceof Transform || event instanceof AudioEvent) {
             return false;
         }
     }
@@ -1486,6 +1543,9 @@ function remove_events(events) {
             for (var layer of get_layer_descendants(e.layer)) {
                 layer.last_visibility_check = null;
             }
+        } else if (e instanceof AudioEvent) {
+            remove_event_impl(e, e.layer.audio_buckets, e.layer.audio_events);
+            // TODO: also invalidate audio context in case sounds have been scheduled.
         } else {
             console.log("ERROR: Trying to remove unrecognized event type");
             return;
@@ -1521,6 +1581,9 @@ function add_events(events) {
             for (var layer of get_layer_descendants(e.layer)) {
                 layer.last_visibility_check = null;
             }
+        } else if (e instanceof AudioEvent) {
+            add_event_impl(e, e.layer.audio_buckets, e.layer.audio_events);
+            // TODO: also invalidate audio context in case sounds have been scheduled.
         } else {
             console.log("ERROR: Trying to add unrecognized event type");
             return;
@@ -2930,7 +2993,7 @@ AudioEvent.prototype.begin = function() {
 }
 
 AudioEvent.prototype.end = function() {
-    return this.start + this.audio_buffer.duration;
+    return this.start + this.audio_buffer.duration * 1000.0;
 }
 
 AudioEvent.prototype.shallow_copy = function() {
@@ -4771,6 +4834,7 @@ function set_event_start(event, time, stretch) {
 }
 
 function cut_event(event, time) {
+    // TODO: implement for AudioEvent. Right now, this will just do nothing because get_deltas returns [].
     var deltas = get_deltas(event);
     if (deltas.length < 1) {
         return [event];
@@ -5175,6 +5239,7 @@ function play() {
 
 function stop() {
     if (playing) {
+        stop_audio_recording();
         set_current_project_time();
         last_project_time = current_project_time;
         playing = false;
@@ -5596,34 +5661,27 @@ $(document).ready(function () {
     $( window ).resize(resize_timelines);
 
     // Set up sound recording stuff.
-    var audio_recorder = new AudioRecorder();
-    audio_recorder.add_callback(function (audioBuffer) {
-        const clipName = prompt('Enter a name for your sound clip?','My unnamed clip');
+    global_audio_recorder = new AudioRecorder();
+    global_audio_recorder.add_callback(add_audio_event);
+    // global_audio_recorder.add_callback(function (audioBuffer) {
+    //     const clipName = prompt('Enter a name for your sound clip?','My unnamed clip');
 
-        // Make a clip button that plays back the audio.
-        const clipButton = document.createElement('button');
-        clipButton.textContent = clipName;
-        var self = this;
-        clipButton.onclick = function(e) {
-            var context = get_audio_context();
-            var source = context.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(context.destination);
-            source.start(0);
-        };
+    //     // Make a clip button that plays back the audio.
+    //     const clipButton = document.createElement('button');
+    //     clipButton.textContent = clipName;
+    //     var self = this;
+    //     clipButton.onclick = function(e) {
+    //         var context = get_audio_context();
+    //         var source = context.createBufferSource();
+    //         source.buffer = audioBuffer;
+    //         source.connect(context.destination);
+    //         source.start(0);
+    //     };
 
-        // Add the clip button.
-        $("#sound_clips").append(clipButton);
-    });
-    $("#record_button").on("click", function() {
-        if (!audio_recorder.recording) {
-            audio_recorder.start();
-            $("#record_button").html("Stop");
-        } else {
-            audio_recorder.stop();
-            $("#record_button").html("Record");
-        }
-    });
+    //     // Add the clip button.
+    //     $("#sound_clips").append(clipButton);
+    // });
+    $("#record_button").on("click", toggle_audio_recording);
 
     window.requestAnimationFrame(tick);
 });
