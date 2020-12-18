@@ -114,7 +114,7 @@ function deserializeState(state, project_filepath) {
 
 function setProjectFilepath(project_filepath) {
     current_project_filepath = project_filepath;
-    var txt = current_project_filepath === null ? "(unsaved_project)" : current_project_filepath;
+    var txt = current_project_filepath === null ? "(unsaved project)" : current_project_filepath;
     $("#current_project_name").text(txt);
 }
 
