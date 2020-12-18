@@ -3800,10 +3800,7 @@ function add_visibility_event(layer, action) {
     var bucket = Math.floor(current_project_time / bucket_size);
     layer.visibility_events.push(event);
     addToBucket(layer.visibility_buckets, bucket, event);
-
-    // Give the event a rank in the timeline & tell timeline to update itself
-    layer.timeline.assign_rank(event);
-    layer.timeline.needs_redraw = true;
+    layer.finalize_event(event);
 }
 
 // TODO: figure out proper encapsulation
