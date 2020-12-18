@@ -299,6 +299,74 @@ function makeJSONReviver(callback_vector) {
     }
 }
 
+// Start AudioRecorder
+
+function AudioRecorder() {
+    this.recording = false;
+    this.callbacks = [];
+    this.chunks = [];
+    this.media_recorder = null;
+    // TODO move this to be global?
+    this.context = null;
+
+    var self = this;
+    let onSuccess = function(stream) {
+        self.media_recorder = new MediaRecorder(stream);
+
+        self.media_recorder.onstop = function(e) {
+            // Store audio blob.
+            const blob = new Blob(self.chunks, { 'type' : 'audio/ogg; codecs=opus' });
+            self.chunks = [];
+            blob.arrayBuffer().then(arrayBuffer => {
+                // Convert to AudioBuffer.
+                self.get_context().decodeAudioData(arrayBuffer).then(audioBuffer => {
+                    for (var callback of self.callbacks) {
+                        callback.call(self, audioBuffer);
+                    }
+                });
+            });
+        }
+
+
+        self.media_recorder.ondataavailable = function(e) {
+            self.chunks.push(e.data);
+        }
+    }
+
+    let onError = function(err) {
+        console.log("Error: couldn't set up audio recording: " + err);
+    }
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(onSuccess, onError);
+}
+
+AudioRecorder.prototype.get_context = function() {
+    if (this.context === null) {
+        this.context = new AudioContext();
+    }
+    return this.context;
+}
+
+AudioRecorder.prototype.add_callback = function(callback) {
+    this.callbacks.push(callback);
+}
+
+AudioRecorder.prototype.start = function() {
+    if (!this.recording && this.media_recorder !== null) {
+        this.recording = true;
+        this.media_recorder.start();
+    }
+}
+
+AudioRecorder.prototype.stop = function() {
+    if (this.recording && this.media_recorder !== null) {
+        this.recording = false;
+        this.media_recorder.stop();
+    }
+}
+
+// End AudioRecorder
+
 // START TIMELINE DEFINITION
 
 function Timeline(layer) {
@@ -5527,71 +5595,34 @@ $(document).ready(function () {
     $( window ).resize(resize_timelines);
 
     // Set up sound recording stuff.
-    {
-        const constraints = { audio: true };
+    var audio_recorder = new AudioRecorder();
+    audio_recorder.add_callback(function (audioBuffer) {
+        const clipName = prompt('Enter a name for your sound clip?','My unnamed clip');
 
-        let onSuccess = function(stream) {
-            const mediaRecorder = new MediaRecorder(stream);
-            var recording = false;
-            var chunks = [];
+        // Make a clip button that plays back the audio.
+        const clipButton = document.createElement('button');
+        clipButton.textContent = clipName;
+        var self = this;
+        clipButton.onclick = function(e) {
+            var context = self.get_context();
+            var source = context.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(context.destination);
+            source.start(0);
+        };
 
-            var context = new AudioContext();
-
-            $("#record_button").on("click", function() {
-                if (!recording) {
-                    recording = true;
-                    mediaRecorder.start();
-                    console.log(mediaRecorder.state);
-                    console.log("recorder started");
-                } else {
-                    recording = false;
-                    mediaRecorder.stop();
-                    console.log(mediaRecorder.state);
-                    console.log("recorder stopped");
-                }
-            });
-
-
-            mediaRecorder.onstop = function(e) {
-                console.log("data available after MediaRecorder.stop() called.");
-
-                // Store audio blob.
-                const blob = new Blob(chunks, { 'type' : 'audio/ogg; codecs=opus' });
-                chunks = [];
-                blob.arrayBuffer().then(arrayBuffer => {
-                    // Convert to AudioBuffer.
-                    context.decodeAudioData(arrayBuffer).then(audioBuffer => {
-
-                        const clipName = prompt('Enter a name for your sound clip?','My unnamed clip');
-
-                        // Make a clip button that plays back the audio.
-                        const clipButton = document.createElement('button');
-                        clipButton.textContent = clipName;
-                        clipButton.onclick = function(e) {
-                            var source = context.createBufferSource();
-                            source.buffer = audioBuffer;
-                            source.connect(context.destination);
-                            source.start(0);
-                        };
-
-                        // Add the clip button.
-                        $("#sound_clips").append(clipButton);
-                    });
-                });
-            }
-
-
-            mediaRecorder.ondataavailable = function(e) {
-                chunks.push(e.data);
-            }
+        // Add the clip button.
+        $("#sound_clips").append(clipButton);
+    });
+    $("#record_button").on("click", function() {
+        if (!audio_recorder.recording) {
+            audio_recorder.start();
+            $("#record_button").html("Stop");
+        } else {
+            audio_recorder.stop();
+            $("#record_button").html("Record");
         }
-
-        let onError = function(err) {
-            console.log('The following error occured: ' + err);
-        }
-
-        navigator.mediaDevices.getUserMedia(constraints).then(onSuccess, onError);
-    }
+    });
 
     window.requestAnimationFrame(tick);
 });
