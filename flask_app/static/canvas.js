@@ -33,6 +33,7 @@ var next_layer_key = 1;
 var current_layer = null;
 var current_action = null;
 var current_project_filepath = null;
+var global_audio_context = null;
 
 function resetGlobals() {
     playing = false;
@@ -51,6 +52,7 @@ function resetGlobals() {
     current_layer = null;
     current_action = null;
     current_project_filepath = null;
+    global_audio_context = null;
 }
 
 function resetState() {
@@ -299,6 +301,14 @@ function makeJSONReviver(callback_vector) {
     }
 }
 
+function get_audio_context() {
+    if (global_audio_context === null) {
+        global_audio_context = new AudioContext();
+    }
+    return global_audio_context;
+}
+
+
 // Start AudioRecorder
 
 function AudioRecorder() {
@@ -306,8 +316,6 @@ function AudioRecorder() {
     this.callbacks = [];
     this.chunks = [];
     this.media_recorder = null;
-    // TODO move this to be global?
-    this.context = null;
 
     var self = this;
     let onSuccess = function(stream) {
@@ -319,7 +327,7 @@ function AudioRecorder() {
             self.chunks = [];
             blob.arrayBuffer().then(arrayBuffer => {
                 // Convert to AudioBuffer.
-                self.get_context().decodeAudioData(arrayBuffer).then(audioBuffer => {
+                get_audio_context().decodeAudioData(arrayBuffer).then(audioBuffer => {
                     for (var callback of self.callbacks) {
                         callback.call(self, audioBuffer);
                     }
@@ -338,13 +346,6 @@ function AudioRecorder() {
     }
 
     navigator.mediaDevices.getUserMedia({ audio: true }).then(onSuccess, onError);
-}
-
-AudioRecorder.prototype.get_context = function() {
-    if (this.context === null) {
-        this.context = new AudioContext();
-    }
-    return this.context;
 }
 
 AudioRecorder.prototype.add_callback = function(callback) {
@@ -5604,7 +5605,7 @@ $(document).ready(function () {
         clipButton.textContent = clipName;
         var self = this;
         clipButton.onclick = function(e) {
-            var context = self.get_context();
+            var context = get_audio_context();
             var source = context.createBufferSource();
             source.buffer = audioBuffer;
             source.connect(context.destination);
