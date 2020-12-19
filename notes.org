@@ -204,7 +204,7 @@
 ** DONE Implement playback proof-of-concept
 ** DONE Implement timeline for audio
 ** DONE Implement scheduled playback
-** TODO Handle moving-audio-while-playing corner case
+** DONE Handle moving-audio-while-playing corner case
 ** TODO Implement saving/loading
 ** TODO Implement exporting
 ** TODO Implement cutting

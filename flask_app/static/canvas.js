@@ -426,9 +426,14 @@ AudioRecorder.prototype.stop = function() {
 
 function AudioPlayer() {
     this.playing_sounds = [];
+    this.playing_layers = new Set();
 }
 
 AudioPlayer.prototype.schedule_layer = function(layer) {
+    if (this.playing_layers.has(layer)) {
+        return;
+    }
+    this.playing_layers.add(layer);
     set_current_project_time();
     var context = get_audio_context();
     var audio_time = context.currentTime;
@@ -459,6 +464,8 @@ AudioPlayer.prototype.stop_all = function() {
     for (var sound of this.playing_sounds) {
         sound.stop();
     }
+    this.playing_sounds = [];
+    this.playing_layers = new Set();
 }
 
 // End AudioPlayer
@@ -1598,7 +1605,8 @@ function remove_events(events) {
             }
         } else if (e instanceof AudioEvent) {
             remove_event_impl(e, e.layer.audio_buckets, e.layer.audio_events);
-            // TODO: also invalidate audio context in case sounds have been scheduled.
+            // Invalidate audio playback so we reschedule on the next tick.
+            stop_audio_playback();
         } else {
             console.log("ERROR: Trying to remove unrecognized event type");
             return;
@@ -1636,7 +1644,8 @@ function add_events(events) {
             }
         } else if (e instanceof AudioEvent) {
             add_event_impl(e, e.layer.audio_buckets, e.layer.audio_events);
-            // TODO: also invalidate audio context in case sounds have been scheduled.
+            // Invalidate audio playback so we reschedule on the next tick.
+            stop_audio_playback();
         } else {
             console.log("ERROR: Trying to add unrecognized event type");
             return;
@@ -1829,6 +1838,9 @@ function transformPeriod(start, end, layer, ctx, matrices) {
 }
 
 function tick() {
+    if (playing) {
+        schedule_audio_playback();
+    }
     set_current_project_time();
     var changed = (last_tick === null || last_tick != current_project_time);
     // TODO: prevent bad stuff, like deleting the last layer while a tool is in use!
