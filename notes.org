@@ -199,7 +199,15 @@
 ** TODO Put all additional tool options on the right side of canvas as well, either beside or below the main tool selection.
 ** TODO Hide/show additional tool options (stroke color & size, font options, table options, apply transforms to events checkbox, etc) as appropriate based on what tool is selected.
 * Sound Recording
-** TODO Figure out HOW
+** DONE Figure out HOW
+** DONE Implement recording proof-of-concept
+** DONE Implement playback proof-of-concept
+** DONE Implement timeline for audio
+** DONE Implement scheduled playback
+** TODO Handle moving-audio-while-playing corner case
+** TODO Implement saving/loading
+** TODO Implement exporting
+** TODO Implement cutting
 * Video Exporting
 ** TODO Figure out colour vibrancy issue (exported videos have less vibrant colours than the in-browser view)
 ** TODO Figure out why exported videos won't play except in VLC
