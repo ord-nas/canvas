@@ -50,6 +50,7 @@ function resetGlobals() {
     last_viewport_matrix = null;
     tick_callbacks = {};
     layers = [];
+    audio_layers = [];
     next_layer_key = 1;
     current_layer = null;
     current_action = null;
@@ -63,8 +64,9 @@ function resetState() {
     // Reset all global variables.
     resetGlobals();
 
-    // Call update_layers to delete layer artifacts from the DOM.
+    // Call update_layers and update_audio_layers to delete layer artifacts from the DOM.
     update_layers();
+    update_audio_layers();
 
     // Ensure that a tool is actually selected.
     $("input[type=radio][name=tool]:checked").change();
@@ -81,6 +83,7 @@ function serializeState() {
     var state = {
         version: "0",
         layers: layers,
+        audio_layers: audio_layers,
         current_seq_id: current_seq_id,
         next_layer_key: next_layer_key,
     };
@@ -103,6 +106,7 @@ function deserializeState(state, project_filepath) {
 
     // Install deserialized globals.
     layers = deserialized.layers;
+    audio_layers = deserialized.audio_layers;
     current_seq_id = deserialized.current_seq_id;
     next_layer_key = deserialized.next_layer_key;
 
@@ -111,8 +115,9 @@ function deserializeState(state, project_filepath) {
         cb();
     }
 
-    // Run update_layers to update DOM.
+    // Run update_layers and update_audio_layers to update DOM.
     update_layers();
+    update_audio_layers();
 }
 
 function setProjectFilepath(project_filepath) {
@@ -339,9 +344,9 @@ function toggle_audio_recording() {
     }
 }
 
-function add_audio_event(audio_buffer, recording_start_time) {
+function add_audio_event(audio_buffer, data_url, recording_start_time) {
     var layer = audio_layers[0];
-    var event = new AudioEvent(audio_buffer, recording_start_time, current_seq_id++, layer);
+    var event = new AudioEvent(audio_buffer, data_url, recording_start_time, current_seq_id++, layer);
 
     layer.audio_events.push(event);
     addToAllRelevantBuckets(event, layer.audio_buckets);
@@ -358,6 +363,17 @@ function stop_audio_playback() {
     if (global_audio_player !== null) {
         global_audio_player.stop_all();
     }
+}
+
+function update_audio_layers() {
+    if (audio_layers.length === 0) {
+        audio_layers.push(new AudioLayer("Audio", "audio"));
+    }
+    $("#audio_selector").empty();
+    for (var layer of audio_layers) {
+        $("#audio_selector").append(create_audio_layer_handle(layer));
+    }
+    resize_timelines();
 }
 
 // Start AudioRecorder
@@ -377,13 +393,22 @@ function AudioRecorder() {
             // Store audio blob.
             const blob = new Blob(self.chunks, { 'type' : 'audio/ogg; codecs=opus' });
             self.chunks = [];
-            blob.arrayBuffer().then(arrayBuffer => {
-                // Convert to AudioBuffer.
-                get_audio_context().decodeAudioData(arrayBuffer).then(audioBuffer => {
-                    for (var callback of self.callbacks) {
-                        callback.call(self, audioBuffer, self.recording_start_time);
-                    }
-                });
+            var audio_buffer_promise =
+                blob.arrayBuffer().then(arrayBuffer =>
+                                        get_audio_context().decodeAudioData(arrayBuffer));
+            var data_url_promise = new Promise(function(resolve, reject) {
+                var reader = new FileReader();
+                reader.readAsDataURL(blob);
+                reader.onloadend = function() {
+                    resolve(reader.result);
+                };
+            });
+            Promise.all([audio_buffer_promise, data_url_promise]).then(results => {
+                var audio_buffer = results[0];
+                var data_url = results[1];
+                for (var callback of self.callbacks) {
+                    callback.call(self, audio_buffer, data_url, self.recording_start_time);
+                }
             });
         }
 
@@ -1541,9 +1566,20 @@ AudioLayer.prototype.expected_properties = new Set([
     "id", "title", "handle_id", "timeline", "audio_buckets", "audio_events",
 ]);
 
-// TODO: Define AudioLayer.prototype.toJSON().
-// TODO: Define AudioLayer.prototype.reifyFromJSON().
-// TODO: Define AudioLayer.prototype.buildBuckets().
+AudioLayer.prototype.toJSON = makeJSONEncoder({
+    audio_buckets: null,
+});
+
+AudioLayer.prototype.reifyFromJSON = function() {
+    this.buildBuckets();
+}
+
+AudioLayer.prototype.buildBuckets = function() {
+    this.audio_buckets = {};
+    for (var event of this.audio_events) {
+        addToAllRelevantBuckets(event, this.audio_buckets);
+    }
+}
 
 AudioLayer.prototype.event_arrays = function() {
     return [
@@ -3040,25 +3076,48 @@ VisibilityEvent.prototype.reverse = function() {}
 
 // AUDIO
 
-function AudioEvent(audio_buffer, start, seq_id, layer) {
+function AudioEvent(audio_buffer, data_url, start, seq_id, layer) {
     this.audio_buffer = audio_buffer;
+    this.data_url = data_url;
     this.start = start;
+    this.duration = audio_buffer.duration * 1000.0;
     this.seq_id = seq_id;
     this.layer = layer;
     this.rank = null;
 }
 
-// TODO: Define AudioEvent.prototype.expected_properties.
-// TODO: Define AudioEvent.prototype.toJSON().
-// TODO: Define AudioEvent.prototype.reifyFromJSON().
-// TODO: Allow actually playing audio events.
+AudioEvent.prototype.expected_properties = new Set([
+    "audio_buffer", "data_url", "start", "duration", "seq_id", "layer", "rank",
+]);
+
+AudioEvent.prototype.toJSON = makeJSONEncoder({
+    // Properties to discard (need to be reset after deserialize).
+    audio_buffer: null,
+    // Properties to transform to a wire-safe format (need to be converted back after deserialize).
+    layer: (layer => layer.id),
+});
+
+AudioEvent.prototype.reifyFromJSON = function() {
+    // Map these properties back to their proper format.
+    this.layer = get_layer_by_id(this.layer);
+
+    // Asynchronously rebuild some properties that need to be created fresh.
+    var self = this;
+    fetch(self.data_url)
+        .then(result => result.blob())
+        .then(blob => blob.arrayBuffer())
+        .then(arrayBuffer => get_audio_context().decodeAudioData(arrayBuffer))
+        .then(audioBuffer => {
+            self.audio_buffer = audioBuffer;
+        });
+}
 
 AudioEvent.prototype.begin = function() {
     return this.start;
 }
 
 AudioEvent.prototype.end = function() {
-    return this.start + this.audio_buffer.duration * 1000.0;
+    return this.start + this.duration;
 }
 
 AudioEvent.prototype.shallow_copy = function() {
@@ -5608,6 +5667,11 @@ function get_layer_by_id(id) {
             return layer;
         }
     }
+    for (var layer of audio_layers) {
+        if (layer.id === id) {
+            return layer;
+        }
+    }
     throw "Layer not found: " + id;
 }
 
@@ -5673,9 +5737,7 @@ $(document).ready(function () {
     });
 
     // Create the audio layer.
-    audio_layers = [];
-    audio_layers.push(new AudioLayer("Audio", "1"));
-    $( "#audio_selector" ).append(create_audio_layer_handle(audio_layers[0]));
+    update_audio_layers();
 
     // Create the layers
     layers = [];
