@@ -35,6 +35,7 @@ var current_action = null;
 var current_project_filepath = null;
 var global_audio_context = null;
 var global_audio_recorder = null;
+var global_audio_player = null;
 
 function resetGlobals() {
     playing = false;
@@ -53,7 +54,6 @@ function resetGlobals() {
     current_layer = null;
     current_action = null;
     current_project_filepath = null;
-    global_audio_context = null;
 }
 
 function resetState() {
@@ -348,6 +348,18 @@ function add_audio_event(audio_buffer, recording_start_time) {
     layer.finalize_event(event);
 }
 
+function schedule_audio_playback() {
+    if (global_audio_player !== null) {
+        global_audio_player.schedule_layer(audio_layers[0]);
+    }
+}
+
+function stop_audio_playback() {
+    if (global_audio_player !== null) {
+        global_audio_player.stop_all();
+    }
+}
+
 // Start AudioRecorder
 
 function AudioRecorder() {
@@ -409,6 +421,47 @@ AudioRecorder.prototype.stop = function() {
 }
 
 // End AudioRecorder
+
+// Start AudioPlayer
+
+function AudioPlayer() {
+    this.playing_sounds = [];
+}
+
+AudioPlayer.prototype.schedule_layer = function(layer) {
+    set_current_project_time();
+    var context = get_audio_context();
+    var audio_time = context.currentTime;
+    for (var event of layer.audio_events) {
+        var relative_start = (event.begin() - current_project_time) / 1000.0;
+        var relative_end = (event.end() - current_project_time) / 1000.0;
+        if (relative_end <= 0.0) {
+            // No action needed, sound already ended.
+            continue;
+        }
+
+        var source = context.createBufferSource();
+        source.buffer = event.audio_buffer;
+        source.connect(context.destination);
+        this.playing_sounds.push(source);
+
+        if (relative_start < 0.0) {
+            // Need to start partway through the sound.
+            source.start(0, -relative_start);
+        } else {
+            // Need to schedule this sound in the future.
+            source.start(audio_time + relative_start);
+        }
+    }
+}
+
+AudioPlayer.prototype.stop_all = function() {
+    for (var sound of this.playing_sounds) {
+        sound.stop();
+    }
+}
+
+// End AudioPlayer
 
 // START TIMELINE DEFINITION
 
@@ -5231,6 +5284,7 @@ function play() {
         var now = new Date();
         last_real_time = now.getTime();
         playing = true;
+        schedule_audio_playback();
     }
 }
 
@@ -5240,6 +5294,7 @@ function stop() {
         set_current_project_time();
         last_project_time = current_project_time;
         playing = false;
+        stop_audio_playback();
     }
 }
 
@@ -5660,25 +5715,8 @@ $(document).ready(function () {
     // Set up sound recording stuff.
     global_audio_recorder = new AudioRecorder();
     global_audio_recorder.add_callback(add_audio_event);
-    // global_audio_recorder.add_callback(function (audioBuffer) {
-    //     const clipName = prompt('Enter a name for your sound clip?','My unnamed clip');
-
-    //     // Make a clip button that plays back the audio.
-    //     const clipButton = document.createElement('button');
-    //     clipButton.textContent = clipName;
-    //     var self = this;
-    //     clipButton.onclick = function(e) {
-    //         var context = get_audio_context();
-    //         var source = context.createBufferSource();
-    //         source.buffer = audioBuffer;
-    //         source.connect(context.destination);
-    //         source.start(0);
-    //     };
-
-    //     // Add the clip button.
-    //     $("#sound_clips").append(clipButton);
-    // });
     $("#record_button").on("click", toggle_audio_recording);
+    global_audio_player = new AudioPlayer();
 
     window.requestAnimationFrame(tick);
 });
