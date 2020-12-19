@@ -6,6 +6,7 @@ State is saved using Javascript's JSON.stringify() utility. A single, top-level 
 var state = {
   version: <version-string>,
   layers: <array-of-layers>,
+  audio_layers: <array-of-audio-layers>,
   current_seq_id: <current-seq-id>,
   next_layer_key: <next-layer-key>,
 };

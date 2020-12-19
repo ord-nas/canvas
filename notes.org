@@ -205,7 +205,7 @@
 ** DONE Implement timeline for audio
 ** DONE Implement scheduled playback
 ** DONE Handle moving-audio-while-playing corner case
-** TODO Implement saving/loading
+** DONE Implement saving/loading
 ** TODO Implement exporting
 ** TODO Implement cutting
 * Video Exporting

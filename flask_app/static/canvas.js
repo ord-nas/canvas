@@ -106,7 +106,9 @@ function deserializeState(state, project_filepath) {
 
     // Install deserialized globals.
     layers = deserialized.layers;
-    audio_layers = deserialized.audio_layers;
+    if ("audio_layers" in deserialized) {
+        audio_layers = deserialized.audio_layers;
+    }
     current_seq_id = deserialized.current_seq_id;
     next_layer_key = deserialized.next_layer_key;
 
@@ -411,7 +413,6 @@ function AudioRecorder() {
                 }
             });
         }
-
 
         self.media_recorder.ondataavailable = function(e) {
             self.chunks.push(e.data);
@@ -3128,8 +3129,9 @@ AudioEvent.prototype.shallow_copy = function() {
 
 AudioEvent.prototype.clone = function() {
     // TODO: this shares the underlying audio_buffer rather than copying it.
-    // Think about how this interacts with serialization.
-    return new AudioEvent(this.audio_buffer, this.start, current_seq_id++, this.layer);
+    // When serializing/deserializing, this sharing goes away and every deserialized event has its own data.
+    // Possibly improve later.
+    return new AudioEvent(this.audio_buffer, this.data_url, this.start, current_seq_id++, this.layer);
 }
 
 AudioEvent.prototype.reverse = function() {
@@ -4783,7 +4785,7 @@ SimpleDirectoryBrowser.prototype.getSelection = function() {
                 // (Once we start versioning project format, this may no longer always be true).
                 var reserialized_state = serializeState();
                 if (data !== reserialized_state) {
-                    throw "loaded project data failed reserialization sanity check";
+                    console.log("WARNING: loaded project data failed reserialization sanity check");
                 }
             }
             opening = false;
