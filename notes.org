@@ -209,6 +209,7 @@ I actually don't know what's going on here. Every now and again, when playing, i
 ** DONE Handle moving-audio-while-playing corner case
 ** DONE Implement saving/loading
 *** DONE Preserve shared audio buffers across serialize/deserialize.
+*** TODO Ensure shared audio buffers are cleaned up when they are no longer referenced by any audio events.
 ** TODO Implement exporting
 ** TODO Implement cutting
 * Video Exporting
