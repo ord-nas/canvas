@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import json
 import re
+import traceback
 from flask import Flask, request
 app = Flask(__name__,
             static_url_path='/static/',
@@ -58,21 +59,27 @@ class ExportManager(object):
                 "final_export_path" : os.path.relpath(path, PROJECT_PATH),
                 "path_adjusted_to_avoid_overwrite" : adjustment_performed
             }
-        except:
+        except Exception as e:
+            print("Exception", e)
+            print(traceback.format_exc())
             self.video_writer = None
             return None
     def write_frame(self, frame):
         try:
             self.video_writer.write(frame)
             return True
-        except:
+        except Exception as e:
+            print("Exception", e)
+            print(traceback.format_exc())
             return False
     def finish_export(self):
         try:
             self.video_writer.release()
             self.video_writer = None
             return True
-        except:
+        except Exception as e:
+            print("Exception", e)
+            print(traceback.format_exc())
             return False
 
 # Global singleton
@@ -88,7 +95,9 @@ def decode_frame(data_url):
         arr = np.fromstring(data, np.uint8)
         frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
         return frame
-    except:
+    except Exception as e:
+        print("Exception", e)
+        print(traceback.format_exc())
         return None
 
 @app.route('/')
@@ -157,7 +166,9 @@ def save_project():
         print("About to save to: " + path)
         with open(path, "w") as f:
             f.write(data)
-    except:
+    except Exception as e:
+        print("Exception", e)
+        print(traceback.format_exc())
         return '', 500
 
     return_payload = {
@@ -178,7 +189,9 @@ def open_project():
         print("About to open: " + path)
         with open(path, "r") as f:
             return f.read(), 200
-    except:
+    except Exception as e:
+        print("Exception", e)
+        print(traceback.format_exc())
         return '', 500
 
 @app.route('/list_project_directory', methods=['GET'])
