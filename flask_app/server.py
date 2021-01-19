@@ -42,6 +42,7 @@ class ExportManager(object):
     def __init__(self, export_dir):
         self.export_dir = export_dir
         self.video_writer = None
+        self.audio_lookup = {}
     def start_export(self, filename, fps, frame_width, frame_height):
         if not re.match(VIDEO_FILE_REGEX, filename):
             # Default to .avi extension if filename is not a valid video file.
@@ -78,6 +79,18 @@ class ExportManager(object):
             print("Exception", e)
             print(traceback.format_exc())
             return False
+    def write_audio(self, audio_id, audio_data):
+        try:
+            audio_index = int(audio_id)
+            path = os.path.join(TEMP_EXPORT_PATH, "%d.ogg" % audio_index)
+            self.audio_lookup[audio_id] = path
+            with open(path, "wb") as f:
+                f.write(audio_data)
+            return True
+        except Exception as e:
+            print("Exception", e)
+            print(traceback.format_exc())
+            return False
     def finish_export(self):
         try:
             self.video_writer.release()
@@ -102,6 +115,19 @@ def decode_frame(data_url):
         arr = np.fromstring(data, np.uint8)
         frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
         return frame
+    except Exception as e:
+        print("Exception", e)
+        print(traceback.format_exc())
+        return None
+
+def decode_audio(data_url):
+    try:
+        header = "data:audio/ogg; codecs=opus;base64,"
+        if not data_url.startswith(header):
+            return None
+        encoded_data = data_url[len(header):]
+        data = base64.b64decode(encoded_data)
+        return data
     except Exception as e:
         print("Exception", e)
         print(traceback.format_exc())
@@ -132,6 +158,19 @@ def write_frame():
         return '', 500
 
     success = export_manager.write_frame(frame)
+    error_code = 200 if success else 500
+    return '', error_code
+
+@app.route('/write_audio', methods=['POST'])
+def write_audio():
+    global export_manager
+
+    audio_id = request.form['id']
+    audio_data = decode_audio(request.form['data_url'])
+    if audio_data is None:
+        return '', 500
+
+    success = export_manager.write_audio(audio_id, audio_data)
     error_code = 200 if success else 500
     return '', error_code
 

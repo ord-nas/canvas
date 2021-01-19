@@ -4206,10 +4206,18 @@ function add_visibility_event(layer, action) {
         };
         var progress_fn = function(p) {
             console.log("Request succeeded: " + p.last_request_sent);
-            export_progress_bar.progressbar("value", p.progress_percent);
-            $("#export-progress-percent").text(`Current progress: ${p.progress_percent.toFixed(1)}%`);
-            $("#export-progress-time").text(`(${p.progress_time.toFixed(1)} of ${p.total_time.toFixed(1)} seconds)`);
-            $("#export-progress-frames").text(`(${p.progress_frames} of approximately ${p.total_frames} frames)`);
+            if (p.export_stage === "video") {
+                export_progress_bar.progressbar("value", p.progress_percent);
+                $("#export-progress-percent").text(`Current progress (video): ${p.progress_percent.toFixed(1)}%`);
+                $("#export-progress-time").text(`(${p.progress_time.toFixed(1)} of ${p.total_time.toFixed(1)} seconds)`);
+                $("#export-progress-frames").text(`(${p.progress_frames} of approximately ${p.total_frames} frames)`);
+            } else if (p.export_stage === "audio") {
+                var audio_percent = 100.0 * p.progress_audio_files / p.total_audio_files;
+                export_progress_bar.progressbar("value", audio_percent);
+                $("#export-progress-percent").text(`Current progress (audio): ${audio_percent.toFixed(1)}%`);
+                $("#export-progress-time").text(`(${p.progress_time.toFixed(1)} of ${p.total_time.toFixed(1)} seconds)`);
+                $("#export-progress-frames").text(`(${p.progress_audio_files} of ${p.total_audio_files} audio files)`);
+            }
             if (p.final_export_path !== null) {
                 $("#export-progress-filename").text(`Exporting to: ${p.final_export_path}`);
             }
@@ -5445,13 +5453,29 @@ function ExportManager(filename, fps, width, height, start_time, end_time, succe
     jCanvas.attr("height", height);
     this.canvas = jCanvas.get(0);
     this.ctx = this.canvas.getContext("2d");
+
+    // Make an ordered list of audio entries, so they can be sent to the server sequentially.
+    this.audio_to_send = [];
+    for (var audio_id in audio_entries) {
+        this.audio_to_send.push(audio_entries[audio_id]);
+    }
 }
 
 ExportManager.prototype.make_progress_object = function() {
-    var last_exported_frame = parseInt(this.last_request_sent);
-    if (isNaN(last_exported_frame)) {
-        last_exported_frame = 0;
+    var total_frames = Math.floor((this.end_time - this.start_time) * this.fps);
+    var total_audio_files = this.audio_to_send.length;
+    var last_exported_frame = 0;
+    var last_exported_audio = 0;
+    var export_stage = "video";
+
+    if (this.last_request_sent.startsWith("write_frame_")) {
+        last_exported_frame = parseInt(this.last_request_sent.split("_")[2]);
+    } else if (this.last_request_sent.startsWith("write_audio_")) {
+        last_exported_frame = total_frames - 1;
+        last_exported_audio = parseInt(this.last_request_sent.split("_")[2]);
+        export_stage = "audio";
     }
+
     var last_exported_time = this.start_time + last_exported_frame / this.fps;
     var final_export_path = (
         this.start_export_server_response === null
@@ -5463,12 +5487,15 @@ ExportManager.prototype.make_progress_object = function() {
             : this.start_export_server_response.path_adjusted_to_avoid_overwrite);
 
     return {
+        export_stage: export_stage,
         last_request_sent: this.last_request_sent,
         progress_percent: 100 * (last_exported_time - this.start_time) / (this.end_time - this.start_time),
         progress_time: last_exported_time - this.start_time,
         total_time: this.end_time - this.start_time,
         progress_frames: last_exported_frame,
-        total_frames: Math.floor((this.end_time - this.start_time) * this.fps),
+        total_frames: total_frames,
+        progress_audio_files: last_exported_audio + 1,
+        total_audio_files: total_audio_files,
         final_export_path: final_export_path,
         path_adjusted_to_avoid_overwrite: path_adjusted_to_avoid_overwrite,
     };
@@ -5549,21 +5576,39 @@ ExportManager.prototype.maybe_send_next_server_request = function() {
     // Compute the next request.
     var next_request = null;
     var draw_time = null;
+    var audio_index = null;
     if (this.client_status === "canceled") {
         next_request = "cancel_export";
     } else if (this.last_request_sent === "start_export") {
-        next_request = 0;
-    } else {
-        var i = parseInt(this.last_request_sent);
-        if (!isNaN(i)) {
-            next_request = i + 1;
+        next_request = "write_frame_0";
+        draw_time = 1000.0 * this.start_time;
+    } else if (this.last_request_sent.startsWith("write_frame_")) {
+        var i = parseInt(this.last_request_sent.split("_")[2]);
+        if (isNaN(i)) {
+            throw "Invalid write frame request, " + this.last_request_sent;
         }
-    }
-    if (typeof next_request === "number") {
-        draw_time = 1000.0 * (this.start_time + next_request / this.fps);
-        if (draw_time > 1000.0 * this.end_time) {
+        var next = i + 1;
+        draw_time = 1000.0 * (this.start_time + next / this.fps);
+        if (draw_time <= 1000.0 * this.end_time) {
+            next_request = "write_frame_" + next;
+        } else if (this.audio_to_send.length > 0) {
+            next_request = "write_audio_0"
+            audio_index = 0;
+        } else {
             next_request = "finish_export";
-            draw_time = null;
+        }
+    } else if (this.last_request_sent.startsWith("write_audio_")) {
+        var i = parseInt(this.last_request_sent.split("_")[2]);
+        if (isNaN(i)) {
+            throw "Invalid write audio request, " + this.last_request_sent;
+        }
+        var next = i + 1;
+        audio_index = next;
+        if (next < this.audio_to_send.length) {
+            next_request = "write_audio_" + next;
+        } else {
+            next_request = "finish_export";
+            audio_index = null;
         }
     }
     if (next_request === null) {
@@ -5585,7 +5630,7 @@ ExportManager.prototype.maybe_send_next_server_request = function() {
     }
 
     // Handle write_frame request.
-    if (typeof next_request === "number" && draw_time !== null) {
+    if (next_request.startsWith("write_frame_") && draw_time !== null) {
         if (last_tick === draw_time) {
             // If we are already at the right project time, do the export.
             var frame_data = this.get_current_frame_data();
@@ -5598,6 +5643,15 @@ ExportManager.prototype.maybe_send_next_server_request = function() {
             set_current_project_time();
             $("#time").val(current_project_time / 1000);
         }
+    }
+
+    // Handle write_audio request.
+    if (next_request.startsWith("write_audio_") && audio_index !== null) {
+        var audio_id = this.audio_to_send[audio_index].id;
+        var audio_data = this.audio_to_send[audio_index].data_url;
+        this.post("../write_audio", {data_url: audio_data, id: audio_id});
+        this.last_request_sent = next_request;
+        this.server_status = "working";
     }
 }
 
