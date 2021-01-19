@@ -4182,6 +4182,10 @@ function add_visibility_event(layer, action) {
             export_progress_bar.find(".ui-progressbar-value").css({
                 "background": "green",
             });
+            export_progress_bar.progressbar("value", 100.0);
+            $("#export-progress-percent").text("Done.");
+            $("#export-progress-time").text("");
+            $("#export-progress-frames").text("");
             export_progress_dialog.dialog({
                 buttons: {
                     "Ok": function() {
@@ -4224,6 +4228,11 @@ function add_visibility_event(layer, action) {
                 $("#export-progress-percent").text(`Current progress (audio): ${audio_percent.toFixed(1)}%`);
                 $("#export-progress-time").text("");
                 $("#export-progress-frames").text(`(${p.progress_audio_files} of ${p.total_audio_files} audio files)`);
+            } else if (p.export_stage === "finishing") {
+                export_progress_bar.progressbar("value", false);
+                $("#export-progress-percent").text("Finishing...");
+                $("#export-progress-time").text("");
+                $("#export-progress-frames").text("");
             }
             if (p.final_export_path !== null) {
                 $("#export-progress-filename").text(`Exporting to: ${p.final_export_path}`);
@@ -5554,6 +5563,8 @@ ExportManager.prototype.make_progress_object = function() {
         last_exported_frame = total_frames - 1;
         last_exported_audio = parseInt(this.last_request_sent.split("_")[2]);
         export_stage = "audio";
+    } else if (this.last_request_sent == "finish_export") {
+        export_stage = "finishing";
     }
 
     var last_exported_time = this.start_time + last_exported_frame / this.fps;
@@ -5574,7 +5585,7 @@ ExportManager.prototype.make_progress_object = function() {
         total_time: this.end_time - this.start_time,
         progress_frames: last_exported_frame,
         total_frames: total_frames,
-        progress_audio_files: last_exported_audio + 1,
+        progress_audio_files: last_exported_audio,
         total_audio_files: total_audio_files,
         final_export_path: final_export_path,
         path_adjusted_to_avoid_overwrite: path_adjusted_to_avoid_overwrite,
@@ -5654,8 +5665,8 @@ ExportManager.prototype.handle_server_response = function(data, status) {
     }
 
     this.server_status = "ready";
-    this.progress(this.make_progress_object());
     this.maybe_send_next_server_request();
+    this.progress(this.make_progress_object());
 }
 
 ExportManager.prototype.maybe_send_next_server_request = function() {

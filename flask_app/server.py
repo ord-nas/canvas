@@ -7,6 +7,7 @@ import json
 import re
 import shutil
 import traceback
+import subprocess
 from flask import Flask, request
 app = Flask(__name__,
             static_url_path='/static/',
@@ -91,12 +92,42 @@ class ExportManager(object):
             print("Exception", e)
             print(traceback.format_exc())
             return False
-    def finish_export(self):
+    def get_single_audio_file(self):
+        if len(self.audio_lookup) != 1:
+            return None
+        for filename in self.audio_lookup.values():
+            return filename
+    def cancel_export(self):
         try:
             self.video_writer.release()
             self.video_writer = None
             self.audio_lookup = {}
-            shutil.copyfile(self.temp_video_path, self.final_export_path)
+            return True
+        except Exception as e:
+            print("Exception", e)
+            print(traceback.format_exc())
+            return False
+    def finish_export(self):
+        try:
+            self.video_writer.release()
+            self.video_writer = None
+            audio_file = self.get_single_audio_file()
+            if audio_file is None:
+                # No audio means we can directly copy the temp video to the output.
+                shutil.copyfile(self.temp_video_path, self.final_export_path)
+            else:
+                # Otherwise, combine the video and audio.
+                return_code = subprocess.call(["ffmpeg",
+                                               "-i",
+                                               self.temp_video_path,
+                                               "-i",
+                                               audio_file,
+                                               "-c",
+                                               "copy",
+                                               self.final_export_path])
+                if return_code != 0:
+                    raise RuntimeError("FFMPEG exited with non-zero return code: %d" % return_code)
+            self.audio_lookup = {}
             return True
         except Exception as e:
             print("Exception", e)
@@ -185,11 +216,10 @@ def finish_export():
     return '', error_code
 
 @app.route('/cancel_export', methods=['POST'])
-# This is the same as finish for now.
 def cancel_export():
     global export_manager
 
-    success = export_manager.finish_export()
+    success = export_manager.cancel_export()
     error_code = 200 if success else 500
     return '', error_code
 

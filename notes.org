@@ -212,7 +212,7 @@ Maybe one way to do this would be to change set_current_project_time to use the 
 ** DONE Implement saving/loading
 *** DONE Preserve shared audio buffers across serialize/deserialize.
 *** TODO Ensure shared audio buffers are cleaned up when they are no longer referenced by any audio events.
-** TODO Implement exporting
+** DONE Implement exporting
 ** TODO Implement cutting
 * Video Exporting
 ** TODO Figure out colour vibrancy issue (exported videos have less vibrant colours than the in-browser view)
