@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import json
 import re
+import shutil
 import traceback
 from flask import Flask, request
 app = Flask(__name__,
@@ -14,6 +15,8 @@ app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 # Global paths.
 PROJECT_PATH = '/home/sandro/Documents/Canvas Projects/'
+DEBUG_PATH = '/home/sandro/Documents/Canvas Server Debug/'
+TEMP_EXPORT_PATH = os.path.join(DEBUG_PATH, 'Export Artifacts')
 VIDEO_FILE_REGEX = r'.*\.avi$'
 PROJECT_FILE_REGEX = r'.*\.cnvs$'
 
@@ -46,17 +49,20 @@ class ExportManager(object):
         path = os.path.join(self.export_dir, filename)
         new_path = avoid_filename_conflicts(path)
         adjustment_performed = (new_path != path)
-        path = new_path
+        self.final_export_path = new_path
         try:
             if self.video_writer is not None:
                 self.video_writer.release()
+            shutil.rmtree(TEMP_EXPORT_PATH, ignore_errors=True)
+            os.mkdir(TEMP_EXPORT_PATH)
+            self.temp_video_path = os.path.join(TEMP_EXPORT_PATH, "video.avi")
             self.video_writer = cv2.VideoWriter(
-                path,
+                self.temp_video_path,
                 cv2.VideoWriter_fourcc('M','P','E','G'),
                 fps,
                 (frame_width,frame_height))
             return {
-                "final_export_path" : os.path.relpath(path, PROJECT_PATH),
+                "final_export_path" : os.path.relpath(self.final_export_path, PROJECT_PATH),
                 "path_adjusted_to_avoid_overwrite" : adjustment_performed
             }
         except Exception as e:
@@ -76,6 +82,7 @@ class ExportManager(object):
         try:
             self.video_writer.release()
             self.video_writer = None
+            shutil.copyfile(self.temp_video_path, self.final_export_path)
             return True
         except Exception as e:
             print("Exception", e)
