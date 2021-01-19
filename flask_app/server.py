@@ -82,7 +82,7 @@ class ExportManager(object):
     def write_audio(self, audio_id, audio_data):
         try:
             audio_index = int(audio_id)
-            path = os.path.join(TEMP_EXPORT_PATH, "%d.ogg" % audio_index)
+            path = os.path.join(TEMP_EXPORT_PATH, "%d.wav" % audio_index)
             self.audio_lookup[audio_id] = path
             with open(path, "wb") as f:
                 f.write(audio_data)
@@ -95,6 +95,7 @@ class ExportManager(object):
         try:
             self.video_writer.release()
             self.video_writer = None
+            self.audio_lookup = {}
             shutil.copyfile(self.temp_video_path, self.final_export_path)
             return True
         except Exception as e:
@@ -122,7 +123,8 @@ def decode_frame(data_url):
 
 def decode_audio(data_url):
     try:
-        header = "data:audio/ogg; codecs=opus;base64,"
+        # header = "data:audio/ogg; codecs=opus;base64,"
+        header = "data:audio/wav;base64,"
         if not data_url.startswith(header):
             return None
         encoded_data = data_url[len(header):]

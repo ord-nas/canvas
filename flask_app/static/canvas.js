@@ -370,9 +370,9 @@ function add_audio_event(audio_buffer, data_url, recording_start_time) {
     layer.finalize_event(event);
 }
 
-function schedule_audio_playback() {
+function schedule_audio_playback(context = null) {
     if (global_audio_player !== null) {
-        global_audio_player.schedule_layer(audio_layers[0]);
+        global_audio_player.schedule_layer(audio_layers[0], context);
     }
 }
 
@@ -470,13 +470,15 @@ function AudioPlayer() {
     this.playing_layers = new Set();
 }
 
-AudioPlayer.prototype.schedule_layer = function(layer) {
+AudioPlayer.prototype.schedule_layer = function(layer, context = null) {
     if (this.playing_layers.has(layer)) {
         return;
     }
     this.playing_layers.add(layer);
+    if (context === null) {
+        context = get_audio_context();
+    }
     set_current_project_time();
-    var context = get_audio_context();
     var audio_time = context.currentTime;
     for (var event of layer.audio_events) {
         var relative_start = (event.begin() - current_project_time) / 1000.0;
@@ -4206,7 +4208,12 @@ function add_visibility_event(layer, action) {
         };
         var progress_fn = function(p) {
             console.log("Request succeeded: " + p.last_request_sent);
-            if (p.export_stage === "video") {
+            if (p.export_stage === "mixing") {
+                export_progress_bar.progressbar("value", false);
+                $("#export-progress-percent").text("Mixing audio...");
+                $("#export-progress-time").text("");
+                $("#export-progress-frames").text("");
+            } else if (p.export_stage === "video") {
                 export_progress_bar.progressbar("value", p.progress_percent);
                 $("#export-progress-percent").text(`Current progress (video): ${p.progress_percent.toFixed(1)}%`);
                 $("#export-progress-time").text(`(${p.progress_time.toFixed(1)} of ${p.total_time.toFixed(1)} seconds)`);
@@ -4215,7 +4222,7 @@ function add_visibility_event(layer, action) {
                 var audio_percent = 100.0 * p.progress_audio_files / p.total_audio_files;
                 export_progress_bar.progressbar("value", audio_percent);
                 $("#export-progress-percent").text(`Current progress (audio): ${audio_percent.toFixed(1)}%`);
-                $("#export-progress-time").text(`(${p.progress_time.toFixed(1)} of ${p.total_time.toFixed(1)} seconds)`);
+                $("#export-progress-time").text("");
                 $("#export-progress-frames").text(`(${p.progress_audio_files} of ${p.total_audio_files} audio files)`);
             }
             if (p.final_export_path !== null) {
@@ -5434,6 +5441,79 @@ function tool_change() {
     if (current_action) current_action.start();
 }
 
+// Modified from: https://www.russellgood.com/how-to-convert-audiobuffer-to-audio-file/
+// Convert an AudioBuffer to a data_url using WAVE representation.
+// Returns a promise that resolves to the data_url.
+function bufferToWave(abuffer) {
+    function setUint16(data) {
+        view.setUint16(pos, data, true);
+        pos += 2;
+    }
+
+    function setUint32(data) {
+        view.setUint32(pos, data, true);
+        pos += 4;
+    }
+
+    var numOfChan = abuffer.numberOfChannels,
+        length = abuffer.length * numOfChan * 2 + 44,
+        buffer = new ArrayBuffer(length),
+        view = new DataView(buffer),
+        channels = [], i, sample,
+        offset = 0,
+        pos = 0;
+
+    // write WAVE header
+    setUint32(0x46464952);                         // "RIFF"
+    setUint32(length - 8);                         // file length - 8
+    setUint32(0x45564157);                         // "WAVE"
+
+    setUint32(0x20746d66);                         // "fmt " chunk
+    setUint32(16);                                 // length = 16
+    setUint16(1);                                  // PCM (uncompressed)
+    setUint16(numOfChan);
+    setUint32(abuffer.sampleRate);
+    setUint32(abuffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
+    setUint16(numOfChan * 2);                      // block-align
+    setUint16(16);                                 // 16-bit (hardcoded in this demo)
+
+    setUint32(0x61746164);                         // "data" - chunk
+    setUint32(length - pos - 4);                   // chunk length
+
+    // write interleaved data
+    for(i = 0; i < abuffer.numberOfChannels; i++)
+        channels.push(abuffer.getChannelData(i));
+
+    while(pos < length) {
+        for(i = 0; i < numOfChan; i++) {             // interleave channels
+            sample = Math.max(-1, Math.min(1, channels[i][offset])); // clamp
+            sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767)|0; // scale to 16-bit signed int
+            view.setInt16(pos, sample, true);          // write 16-bit sample
+            pos += 2;
+        }
+        offset++                                     // next source sample
+    }
+
+    // create Blob
+    var blob = new Blob([buffer], {type: "audio/wav"});
+
+    // Convert to data_url.
+    return new Promise(function(resolve, reject) {
+        var reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = function() {
+            resolve(reader.result);
+        };
+    });
+}
+
+function wait(ms) {
+    return new Promise(resolve => {
+        console.log("Starting to wait...");
+        setTimeout(resolve, ms);
+    });
+}
+
 function ExportManager(filename, fps, width, height, start_time, end_time, success, error, progress) {
     this.filename = filename;
     this.fps = fps;
@@ -5454,11 +5534,8 @@ function ExportManager(filename, fps, width, height, start_time, end_time, succe
     this.canvas = jCanvas.get(0);
     this.ctx = this.canvas.getContext("2d");
 
-    // Make an ordered list of audio entries, so they can be sent to the server sequentially.
+    // Make an array for holding all the audio we want to send to the server.
     this.audio_to_send = [];
-    for (var audio_id in audio_entries) {
-        this.audio_to_send.push(audio_entries[audio_id]);
-    }
 }
 
 ExportManager.prototype.make_progress_object = function() {
@@ -5466,10 +5543,13 @@ ExportManager.prototype.make_progress_object = function() {
     var total_audio_files = this.audio_to_send.length;
     var last_exported_frame = 0;
     var last_exported_audio = 0;
-    var export_stage = "video";
+    var export_stage = "mixing";
 
-    if (this.last_request_sent.startsWith("write_frame_")) {
+    if (this.last_request_sent === "") {
+        export_stage = "mixing";
+    } else if (this.last_request_sent.startsWith("write_frame_")) {
         last_exported_frame = parseInt(this.last_request_sent.split("_")[2]);
+        export_stage = "video";
     } else if (this.last_request_sent.startsWith("write_audio_")) {
         last_exported_frame = total_frames - 1;
         last_exported_audio = parseInt(this.last_request_sent.split("_")[2]);
@@ -5512,6 +5592,16 @@ ExportManager.prototype.post = function(url, data) {
 }
 
 ExportManager.prototype.do_export = function() {
+    // Initialize the progress bar.
+    this.last_request_sent = "";
+    this.progress(this.make_progress_object());
+
+    // Start the work!
+    this.mix_audio()
+        .then(this.start_upload.bind(this));
+}
+
+ExportManager.prototype.start_upload = function() {
     this.client_status = "ok";
     this.server_status = "working";
     this.last_request_sent = "start_export";
@@ -5679,6 +5769,42 @@ ExportManager.prototype.get_current_frame_data = function() {
         this.ctx.drawImage(layer.element, 0, 0, this.width, this.height);
     }
     return this.canvas.toDataURL();
+}
+
+ExportManager.prototype.mix_audio = function() {
+    var self = this;
+
+    // Make sure audio playback is stopped.
+    stop_audio_playback();
+
+    // Make an offline audio context to hold the mixed result.
+    // TODO make this somehow dynamic?
+    var channels = 1;
+    var sample_rate = 48000;
+    var length = Math.floor((this.end_time - this.start_time) * sample_rate);
+    var offline_context = new OfflineAudioContext(channels, length, sample_rate);
+
+    // Point project time to the start time.
+    last_project_time = 1000.0 * this.start_time;
+
+    // Schedule audio into the offline context.
+    schedule_audio_playback(offline_context);
+
+    // Return a promise that will resolve when the audio has been fully mixed and self.audio_to_send has been set.
+    return offline_context.startRendering()
+        .then(function(buffer) {
+            stop_audio_playback();
+            return buffer;
+        })
+        .then(bufferToWave)
+        .then(function(audio_data_url) {
+            self.audio_to_send = [
+                {
+                    id: 0,
+                    data_url: audio_data_url,
+                }
+            ];
+        });
 }
 
 function main_keydown_handler(e) {
