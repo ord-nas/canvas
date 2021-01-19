@@ -16,6 +16,7 @@ var always_reset_transform = false;
 
 // Globals.
 
+// Project-state globals.
 var playing = false;
 var last_project_time = 0;
 var last_real_time = 0;
@@ -29,10 +30,13 @@ var last_viewport_matrix = null;
 var tick_callbacks = {};
 var layers = [];
 var audio_layers = [];
+var audio_entries = {};
 var next_layer_key = 1;
 var current_layer = null;
 var current_action = null;
 var current_project_filepath = null;
+
+// Instance-state globals.
 var global_audio_context = null;
 var global_audio_recorder = null;
 var global_audio_player = null;
@@ -51,6 +55,7 @@ function resetGlobals() {
     tick_callbacks = {};
     layers = [];
     audio_layers = [];
+    audio_entries = {};
     next_layer_key = 1;
     current_layer = null;
     current_action = null;
@@ -84,6 +89,7 @@ function serializeState() {
         version: "0",
         layers: layers,
         audio_layers: audio_layers,
+        audio_entries: audio_entries,
         current_seq_id: current_seq_id,
         next_layer_key: next_layer_key,
     };
@@ -108,6 +114,9 @@ function deserializeState(state, project_filepath) {
     layers = deserialized.layers;
     if ("audio_layers" in deserialized) {
         audio_layers = deserialized.audio_layers;
+    }
+    if ("audio_entries" in deserialized) {
+        audio_entries = deserialized.audio_entries;
     }
     current_seq_id = deserialized.current_seq_id;
     next_layer_key = deserialized.next_layer_key;
@@ -347,9 +356,15 @@ function toggle_audio_recording() {
 }
 
 function add_audio_event(audio_buffer, data_url, recording_start_time) {
-    var layer = audio_layers[0];
-    var event = new AudioEvent(audio_buffer, data_url, recording_start_time, current_seq_id++, layer);
+    // First make an audio entry for this.
+    var audio_entry = new AudioEntry(current_seq_id++, audio_buffer, data_url);
+    audio_entries[audio_entry.id] = audio_entry;
 
+    // Then create a new audio event pointing to that entry.
+    var layer = audio_layers[0];
+    var event = new AudioEvent(audio_entry.id, recording_start_time, current_seq_id++, layer);
+
+    // Add the event to the audio layer.
     layer.audio_events.push(event);
     addToAllRelevantBuckets(event, layer.audio_buckets);
     layer.finalize_event(event);
@@ -472,7 +487,12 @@ AudioPlayer.prototype.schedule_layer = function(layer) {
         }
 
         var source = context.createBufferSource();
-        source.buffer = event.audio_buffer;
+        var buffer = audio_entries[event.audio_entry_id].audio_buffer;
+        if (buffer === null) {
+            // This should only happen if the buffer is asynchronously loading and hasn't finished yet.
+            continue;
+        }
+        source.buffer = buffer;
         source.connect(context.destination);
         this.playing_sounds.push(source);
 
@@ -3075,33 +3095,24 @@ VisibilityEvent.prototype.clone = function() {
 
 VisibilityEvent.prototype.reverse = function() {}
 
-// AUDIO
+// AUDIO ENTRY
 
-function AudioEvent(audio_buffer, data_url, start, seq_id, layer) {
+function AudioEntry(id, audio_buffer, data_url) {
+    this.id = id;
     this.audio_buffer = audio_buffer;
     this.data_url = data_url;
-    this.start = start;
-    this.duration = audio_buffer.duration * 1000.0;
-    this.seq_id = seq_id;
-    this.layer = layer;
-    this.rank = null;
 }
 
-AudioEvent.prototype.expected_properties = new Set([
-    "audio_buffer", "data_url", "start", "duration", "seq_id", "layer", "rank",
+AudioEntry.prototype.expected_properties = new Set([
+    "id", "audio_buffer", "data_url",
 ]);
 
-AudioEvent.prototype.toJSON = makeJSONEncoder({
-    // Properties to discard (need to be reset after deserialize).
+AudioEntry.prototype.toJSON = makeJSONEncoder({
+    // Properies to discard (need to be reset after deserialize).
     audio_buffer: null,
-    // Properties to transform to a wire-safe format (need to be converted back after deserialize).
-    layer: (layer => layer.id),
 });
 
-AudioEvent.prototype.reifyFromJSON = function() {
-    // Map these properties back to their proper format.
-    this.layer = get_layer_by_id(this.layer);
-
+AudioEntry.prototype.reifyFromJSON = function() {
     // Asynchronously rebuild some properties that need to be created fresh.
     var self = this;
     fetch(self.data_url)
@@ -3111,6 +3122,32 @@ AudioEvent.prototype.reifyFromJSON = function() {
         .then(audioBuffer => {
             self.audio_buffer = audioBuffer;
         });
+}
+
+// AUDIO EVENT
+
+function AudioEvent(audio_entry_id, start, seq_id, layer) {
+    console.assert(audio_entry_id in audio_entries);
+    this.audio_entry_id = audio_entry_id;
+    this.start = start;
+    this.duration = audio_entries[audio_entry_id].audio_buffer.duration * 1000.0;
+    this.seq_id = seq_id;
+    this.layer = layer;
+    this.rank = null;
+}
+
+AudioEvent.prototype.expected_properties = new Set([
+    "audio_entry_id", "start", "duration", "seq_id", "layer", "rank",
+]);
+
+AudioEvent.prototype.toJSON = makeJSONEncoder({
+    // Properties to transform to a wire-safe format (need to be converted back after deserialize).
+    layer: (layer => layer.id),
+});
+
+AudioEvent.prototype.reifyFromJSON = function() {
+    // Map these properties back to their proper format.
+    this.layer = get_layer_by_id(this.layer);
 }
 
 AudioEvent.prototype.begin = function() {
@@ -3128,10 +3165,7 @@ AudioEvent.prototype.shallow_copy = function() {
 }
 
 AudioEvent.prototype.clone = function() {
-    // TODO: this shares the underlying audio_buffer rather than copying it.
-    // When serializing/deserializing, this sharing goes away and every deserialized event has its own data.
-    // Possibly improve later.
-    return new AudioEvent(this.audio_buffer, this.data_url, this.start, current_seq_id++, this.layer);
+    return new AudioEvent(this.audio_entry_id, this.start, current_seq_id++, this.layer);
 }
 
 AudioEvent.prototype.reverse = function() {

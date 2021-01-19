@@ -207,7 +207,7 @@
 *** TODO Improve synchronization between audio and video.
 ** DONE Handle moving-audio-while-playing corner case
 ** DONE Implement saving/loading
-*** TODO Preserve shared audio buffers across serialize/deserialize.
+*** DONE Preserve shared audio buffers across serialize/deserialize.
 ** TODO Implement exporting
 ** TODO Implement cutting
 * Video Exporting
