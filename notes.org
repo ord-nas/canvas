@@ -205,6 +205,7 @@
 ** DONE Implement timeline for audio
 ** DONE Implement scheduled playback
 *** TODO Improve synchronization between audio and video.
+I actually don't know what's going on here. Every now and again, when playing, it seems the sync is off. But the issue is transient and goes away on the next play. I looked through for potential places where this offset could creep in and couldn't find anything compelling. If this becomes a serious issue I will look into it more, but for now I will basically ignore this.
 ** DONE Handle moving-audio-while-playing corner case
 ** DONE Implement saving/loading
 *** DONE Preserve shared audio buffers across serialize/deserialize.
