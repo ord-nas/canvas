@@ -206,6 +206,8 @@
 ** DONE Implement scheduled playback
 *** TODO Improve synchronization between audio and video.
 I actually don't know what's going on here. Every now and again, when playing, it seems the sync is off. But the issue is transient and goes away on the next play. I looked through for potential places where this offset could creep in and couldn't find anything compelling. If this becomes a serious issue I will look into it more, but for now I will basically ignore this.
+**** TODO Idea
+Maybe one way to do this would be to change set_current_project_time to use the audio clock (rather than the javascript clock) for determining how much time has passed since last_real_time (which would also be specified in the audio coordinate system). Then audio scheduling should also use last_real_time/last_project_time as its coordinate basis, and then everything should automatically be in sync.
 ** DONE Handle moving-audio-while-playing corner case
 ** DONE Implement saving/loading
 *** DONE Preserve shared audio buffers across serialize/deserialize.
