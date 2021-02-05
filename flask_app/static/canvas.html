@@ -113,26 +113,108 @@
 	    <button type="button" id="play">Play</button>
 	    <button type="button" id="stop">Stop</button>
 	</p>
-	<p id="tool_set"></p>
-	<p><input id="transform_events_checkbox" type="checkbox">Apply transformations to individual events</p>
-	<p>
-	    Stroke colour: <input type="color" id="stroke_colour" value="#ff0000" style="width:200px;">
-	    Stroke width: <span id="stroke_width" style="display:inline-block;width:200px;margin-left:15px"></span>
-	</p>
-	<p><span id="viewport_state_description"></span> <button type="button" id="reset_viewport">Reset Viewport</button></p>
 
-	<div id="layer_set" style="position:relative;height:720px">
-	    <canvas id="background" height="720px" width="1280px" style="z-index:0;position:absolute;left:0px;top:0px">
-		Browser doesn't support canvas! Oops!
-	    </canvas>
-	    <canvas id="viewport-overlay" height="720px" width="1280px" style="z-index:1;">
-		Browser doesn't support canvas! Oops!
-	    </canvas>
-	    <canvas id="tool-overlay" height="720px" width="1280px" style="z-index:2;position:absolute;left:0px;top:0px">
-		Browser doesn't support canvas! Oops!
-	    </canvas>
+	<div style="position:relative;height:720px">
+	    <div id="layer_set" style="position:absolute;left:0px;top:0px">
+		<canvas id="background" height="720px" width="1280px" style="z-index:0;position:absolute;left:0px;top:0px">
+		    Browser doesn't support canvas! Oops!
+		</canvas>
+		<canvas id="viewport-overlay" height="720px" width="1280px" style="z-index:1;">
+		    Browser doesn't support canvas! Oops!
+		</canvas>
+		<canvas id="tool-overlay" height="720px" width="1280px" style="z-index:2;position:absolute;left:0px;top:0px">
+		    Browser doesn't support canvas! Oops!
+		</canvas>
+	    </div>
+	    <div style="position:relative;left:1290px;top:0px">
+		<fieldset id="tool_set" style="width:300px">
+		    <legend>Tool Selection</legend>
+		</fieldset>
+		<br/>
+		<fieldset id="tool_options" style="width:300px">
+		    <legend>Tool Options</legend>
+		    <div class="tool_options_div options_paint options_line options_rect options_table options_poly options_circle options_ellipse options_text">
+			Stroke colour<br/>
+			<input type="color" id="stroke_colour" value="#ff0000" style="width:200px;">
+		    </div>
+		    <div class="tool_options_div options_paint options_erase options_line options_rect options_table options_poly options_circle options_ellipse">
+			Stroke width<br/>
+			<span id="stroke_width" class="width_slider"></span>
+		    </div>
+		    <div class="tool_options_div options_line">
+			<input id="snap_line_checkbox" type="checkbox" onclick="tool_change()">Snap Line
+		    </div>
+		    <div class="tool_options_div options_table">
+			Rows<br/>
+			<input type="text" id="table_rows_txt" value="5"><br/>
+		    </div>
+		    <div class="tool_options_div options_table">
+			Cols<br/>
+			<input type="text" id="table_cols_txt" value="5">
+		    </div>
+		    <div class="tool_options_div options_text" id="text_alignment_selection">
+                        Alignment<br/>
+                        <label for="top-left">X</label>
+                        <input type="radio" name="text-alignment-radio" id="top-left" checked="checked">
+                        <label for="top-centre">X</label>
+                        <input type="radio" name="text-alignment-radio" id="top-centre">
+                        <label for="top-right">X</label>
+                        <input type="radio" name="text-alignment-radio" id="top-right">
+                        <br/>
+                        <label for="middle-left">X</label>
+                        <input type="radio" name="text-alignment-radio" id="middle-left">
+                        <label for="middle-centre">X</label>
+                        <input type="radio" name="text-alignment-radio" id="middle-centre">
+                        <label for="middle-right">X</label>
+                        <input type="radio" name="text-alignment-radio" id="middle-right">
+                        <br/>
+                        <label for="bottom-left">X</label>
+                        <input type="radio" name="text-alignment-radio" id="bottom-left">
+                        <label for="bottom-centre">X</label>
+                        <input type="radio" name="text-alignment-radio" id="bottom-centre">
+                        <label for="bottom-right">X</label>
+                        <input type="radio" name="text-alignment-radio" id="bottom-right">
+		    </div>
+		    <div class="tool_options_div options_text">
+                        Font Type<br/>
+			<input type="text" id="font_selector" value="Arial:400">
+		    </div>
+		    <div class="tool_options_div options_text">
+                        Font Size<br/>
+			<input type="text" id="font_size" value="24">
+		    </div>
+		    <div class="tool_options_div options_translate" id="translation_direction_selection">
+			Translation Direction<br/>
+                        <label for="translation_free">Free</label>
+                        <input type="radio" name="translation_radio" id="translation_free" checked="checked" onclick="tool_change()">
+			<label for="translation_horizontal">Horizontal</label>
+                        <input type="radio" name="translation_radio" id="translation_horizontal" onclick="tool_change()">
+                        <label for="translation_vertical">Vertical</label>
+                        <input type="radio" name="translation_radio" id="translation_vertical" onclick="tool_change()">
+		    </div>
+		    <div class="tool_options_div options_scale" id="scale_direction_selection">
+			Scale Direction<br/>
+                        <label for="scale_free">Free</label>
+                        <input type="radio" name="scale_radio" id="scale_free" checked="checked" onclick="tool_change()">
+			<label for="scale_uniform">Uniform</label>
+                        <input type="radio" name="scale_radio" id="scale_uniform" onclick="tool_change()">
+			<br/>
+			<label for="scale_horizontal">Horizontal</label>
+                        <input type="radio" name="scale_radio" id="scale_horizontal" onclick="tool_change()">
+                        <label for="scale_vertical">Vertical</label>
+                        <input type="radio" name="scale_radio" id="scale_vertical" onclick="tool_change()">
+		    </div>
+		    <div class="tool_options_div options_rotate">
+			<input id="rotate_and_scale_checkbox" type="checkbox" onclick="tool_change()">Allow scaling while rotating
+		    </div>
+		    <div class="tool_options_div options_translate options_scale options_rotate">
+			<input id="transform_events_checkbox" type="checkbox">Apply transformations to individual events
+		    </div>
+		    <div class="tool_options_div options_viewport">
+			<span id="viewport_state_description"></span> <button type="button" id="reset_viewport">Reset Viewport</button>
+		    </div>
+		</fieldset>
+	    </div>
 	</div>
-
-	<section id="sound_clips"></section>
     </body>
 </html>

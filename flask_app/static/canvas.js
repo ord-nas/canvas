@@ -3886,67 +3886,68 @@ vertical_translation = TranslationMaker(false, true);
 [uniform_scale, uniform_scale_filter] = RotationAndUniformScaleMaker(false, true);
 [rotate_and_scale, rotate_and_scale_filter] = RotationAndUniformScaleMaker(true, true);
 
-function make_table_ui() {
-    return $("<span>Table (<input type='text' id='table_rows_txt' value='5'> rows by <input type='text' id='table_cols_txt' value='5'> cols)</span>");
+function get_line_action() {
+    if ($("#snap_line_checkbox").is(":checked")) {
+        return new ClickAndDragAction(make_snapped_line)
+    } else {
+        return new ClickAndDragAction(make_line);
+    }
 }
 
-function make_text_ui() {
-    var alignment_selector = $(`<fieldset id="text_alignment_selection" style="display:inline">
-                               <legend>Alignment</legend>
-                               <label for="top-left">X</label>
-                               <input type="radio" name="text-alignment-radio" id="top-left" checked="checked">
-                               <label for="top-centre">X</label>
-                               <input type="radio" name="text-alignment-radio" id="top-centre">
-                               <label for="top-right">X</label>
-                               <input type="radio" name="text-alignment-radio" id="top-right">
-                               <br/>
-                               <label for="middle-left">X</label>
-                               <input type="radio" name="text-alignment-radio" id="middle-left">
-                               <label for="middle-centre">X</label>
-                               <input type="radio" name="text-alignment-radio" id="middle-centre">
-                               <label for="middle-right">X</label>
-                               <input type="radio" name="text-alignment-radio" id="middle-right">
-                               <br/>
-                               <label for="bottom-left">X</label>
-                               <input type="radio" name="text-alignment-radio" id="bottom-left">
-                               <label for="bottom-centre">X</label>
-                               <input type="radio" name="text-alignment-radio" id="bottom-centre">
-                               <label for="bottom-right">X</label>
-                               <input type="radio" name="text-alignment-radio" id="bottom-right">
-                               </fieldset>`);
-    alignment_selector.find("input").checkboxradio({ icon: false });
-    var size_selector = $("<span>Size: <input type='text' id='font_size' value='24'>pt, </span>");
-    var font_selector = $("<span><input type='text' id='font_selector' value='Arial:400'>, </span>");
-    font_selector.find("#font_selector").fontpicker();
-    var span = $("<span>Text (</span>");
-    span.append(font_selector);
-    span.append(size_selector);
-    span.append(alignment_selector);
-    span.append(")");
-    return span;
+function get_translate_action() {
+    var selection_id = $('input[name=translation_radio]:checked').attr("id");
+    if (selection_id === "translation_horizontal") {
+        return new TransformAction(horizontal_translation);
+    } else if (selection_id === "translation_vertical") {
+        return new TransformAction(vertical_translation);
+    } else {
+        return new TransformAction(free_translation);
+    }
+}
+
+function get_scale_action() {
+    var selection_id = $('input[name=scale_radio]:checked').attr("id");
+    if (selection_id === "scale_uniform") {
+        return new TransformAction(uniform_scale, true, uniform_scale_filter);
+    } else if (selection_id === "scale_horizontal") {
+        return new TransformAction(horizontal_scale, true, horizontal_scale_filter);
+    } else if (selection_id === "scale_vertical") {
+        return new TransformAction(vertical_scale, true, vertical_scale_filter);
+    } else {
+        return new TransformAction(free_scale, true, free_scale_filter);
+    }
+}
+
+function get_rotate_action() {
+    if ($("#rotate_and_scale_checkbox").is(":checked")) {
+        return new TransformAction(rotate_and_scale, true, rotate_and_scale_filter);
+    } else {
+        return new TransformAction(rotation, true, rotation_filter);
+    }
+}
+
+function get_radio_id_for_action(action) {
+    return "radio_" + action.key;
+}
+
+function get_options_class_for_action(action) {
+    return "options_" + action.key;
 }
 
 var actions = [
-    {key: "paint", title: "Paint", tool: new PaintAction()},
-    {key: "erase", title: "Erase", tool: new PaintAction(/*is_eraser=*/true)},
-    {key: "line", title: "Line", tool: new ClickAndDragAction(make_line)},
-    {key: "snapped_line", title: "Snapped Line", tool: new ClickAndDragAction(make_snapped_line)},
-    {key: "rect", title: "Rectangle", tool: new ClickAndDragAction(make_rect)},
-    {key: "table", title: "Table", tool: new ClickAndDragAction(make_table), creation: make_table_ui},
-    {key: "poly", title: "Polygon", tool: new PolygonAction},
-    {key: "circle", title: "Circle", tool: new ClickAndDragAction(make_circle)},
-    {key: "ellipse", title: "Ellipse", tool: new ClickAndDragAction(make_ellipse)},
-    {key: "text", title: "Text", tool: new TextAction(), creation: make_text_ui},
-    {key: "translate", title: "Translate", tool: new TransformAction(free_translation)},
-    {key: "htranslate", title: "Horizontal Translate", tool: new TransformAction(horizontal_translation)},
-    {key: "vtranslate", title: "Vertical Translate", tool: new TransformAction(vertical_translation)},
-    {key: "scale", title: "Nonuniform Scale", tool: new TransformAction(free_scale, true, free_scale_filter)},
-    {key: "hscale", title: "Horizontal Scale", tool: new TransformAction(horizontal_scale, true, horizontal_scale_filter)},
-    {key: "vscale", title: "Vertical Scale", tool: new TransformAction(vertical_scale, true, vertical_scale_filter)},
-    {key: "rotate", title: "Rotation", tool: new TransformAction(rotation, true, rotation_filter)},
-    {key: "uscale", title: "Uniform Scale", tool: new TransformAction(uniform_scale, true, uniform_scale_filter)},
-    {key: "rotate_and_scale", title: "Rotation and Scale", tool: new TransformAction(rotate_and_scale, true, rotate_and_scale_filter)},
-    {key: "viewport_transform", title: "Viewport Transform", tool: new ViewportAction()},
+    {key: "paint", title: "Paint", make_tool: () => new PaintAction()},
+    {key: "erase", title: "Erase", make_tool: () => new PaintAction(/*is_eraser=*/true)},
+    {key: "line", title: "Line", make_tool: get_line_action},
+    {key: "rect", title: "Rectangle", make_tool: () => new ClickAndDragAction(make_rect)},
+    {key: "table", title: "Table", make_tool: () => new ClickAndDragAction(make_table)},
+    {key: "poly", title: "Polygon", make_tool: () => new PolygonAction},
+    {key: "circle", title: "Circle", make_tool: () => new ClickAndDragAction(make_circle)},
+    {key: "ellipse", title: "Ellipse", make_tool: () => new ClickAndDragAction(make_ellipse)},
+    {key: "text", title: "Text", make_tool: () => new TextAction()},
+    {key: "translate", title: "Translate", make_tool: get_translate_action},
+    {key: "scale", title: "Scale", make_tool: get_scale_action},
+    {key: "rotate", title: "Rotate", make_tool: get_rotate_action},
+    {key: "viewport", title: "Viewport", make_tool: () => new ViewportAction()},
 ];
 
 // Hide/show handlers
@@ -5441,13 +5442,18 @@ function go() {
 
 function tool_change() {
     if (current_action) current_action.finish();
-    for (var i = 0; i < actions.length; i++) {
-        if (actions[i].key == this.value) {
-            current_action = actions[i].tool;
+    $(".tool_options_div").removeClass("selected_tool");
+    var selection_id = $('input[name=tool_selection_radio]:checked').attr("id");
+    for (var action of actions) {
+        if (get_radio_id_for_action(action) == selection_id) {
+            current_action = action.make_tool();
             break;
         }
     }
-    if (current_action) current_action.start();
+    if (current_action) {
+        $("." + get_options_class_for_action(action)).addClass("selected_tool");
+        current_action.start();
+    }
 }
 
 // Modified from: https://www.russellgood.com/how-to-convert-audiobuffer-to-audio-file/
@@ -5929,18 +5935,21 @@ $(document).ready(function () {
     $("#new_image").on("click", begin_add_image);
     $("#reset_viewport").on("click", function() { viewport_matrix = getIdentityMatrix(); });
 
-    for (var i = 0; i < actions.length; i++) {
-        var text = (actions[i].creation !== undefined) ?
-            actions[i].creation() :
-            document.createTextNode(actions[i].title);
-        $("<input type='radio' name='tool'>")
-            .attr("value", actions[i].key)
-            .appendTo($("#tool_set"));
-        $("#tool_set").append(text);
+    // Toolset
+    var tool_set = $("#tool_set");
+    for (var action of actions) {
+        var radio_id = get_radio_id_for_action(action);
+        $("<label></label>").text(action.title).attr("for", radio_id).appendTo(tool_set);
+        $("<input type='radio' name='tool_selection_radio'>").attr("id", radio_id).appendTo(tool_set);
     }
-    $("#tool_set input:first-child").attr("checked", "checked");
-    $("input[type=radio][name=tool]").change(tool_change);
-    $("input[type=radio][name=tool]:checked").change();
+    tool_set.find("input").checkboxradio({ icon: false });
+    tool_set.find("input").first().attr("checked", "checked");
+    tool_set.find("input[type=radio]").change(tool_change);
+    tool_set.find("input[type=radio]:checked").change();
+    $("#text_alignment_selection input").checkboxradio({ icon: false });
+    $("#font_selector").fontpicker();
+    $("#translation_direction_selection input").checkboxradio({ icon: false });
+    $("#scale_direction_selection input").checkboxradio({ icon: false });
 
     // Keystrokes
     $("body").on("keydown", function(e) {
@@ -5956,7 +5965,7 @@ $(document).ready(function () {
         e.stopPropagation();
     });
 
-    $("#stroke_width").slider({
+    $(".width_slider").slider({
         range: "min",
         min: 1,
         max: 25,

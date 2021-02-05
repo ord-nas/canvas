@@ -112,6 +112,26 @@ li.mjs-nestedSortable-collapsed.mjs-nestedSortable-hovering div {
     height: 500px;
 }
 
+#tool_set label {
+    width: 110px;
+}
+
+.tool_options_div {
+    display: none;
+    margin-top:10px;
+    margin-bottom:10px;
+}
+
+.tool_options_div.selected_tool {
+    display: block;
+}
+
+.width_slider {
+    display:inline-block;
+    width:200px;
+    margin-top:5px;
+}
+
 html * {
     user-select: none;
 }
