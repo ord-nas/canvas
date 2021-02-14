@@ -81,7 +81,7 @@ function resetState() {
     update_stencils();
 
     // Ensure that a tool is actually selected.
-    $("input[type=radio][name=tool]:checked").change();
+    $("input[name=tool_selection_radio]:checked").change();
 
     // Reset displayed project time.
     $("#time").val(current_project_time / 1000);
