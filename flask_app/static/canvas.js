@@ -2237,6 +2237,10 @@ function get_current_width() {
     return $("#stroke_width").slider("value");
 }
 
+function should_use_high_frequency_pointer_events() {
+    return $("#high_frequency_pointer_checkbox").is(":checked");
+}
+
 function get_current_table_rows() {
     var value = parseInt($("#table_rows_txt").val());
     if (isNaN(value)) {
@@ -3776,6 +3780,7 @@ function PaintAction(is_eraser = false) {
     this.active_layer = null;
     this.active_bucket = null;
     this.is_eraser = is_eraser;
+    this.use_high_frequency_events = false;
 }
 
 PaintAction.prototype.mouseup = function(event) {
@@ -3791,6 +3796,7 @@ PaintAction.prototype.mousedown = function(event) {
     if (this.active_stroke === null && event.which === 1) {
         this.mouse_pos = getMousePos(event);
         this.active_layer = current_layer;
+        this.use_high_frequency_events = should_use_high_frequency_pointer_events();
         var pos = findTransformedPoint(this.mouse_pos, this.active_layer);
         var start_time = current_project_time;
         var colour = this.is_eraser ? "eraser" : get_current_colour();
@@ -3811,8 +3817,13 @@ PaintAction.prototype.mousedown = function(event) {
 };
 
 PaintAction.prototype.mousemove = function(event) {
-    this.mouse_pos = getMousePos(event);
-    this.tick();
+    var events = (this.use_high_frequency_events && 'getCoalescedEvents' in event.originalEvent) ?
+        event.originalEvent.getCoalescedEvents() :
+        [event];
+    for (var granular_event of events) {
+        this.mouse_pos = getMousePos(granular_event);
+        this.tick();
+    }
 };
 
 PaintAction.prototype.tick = function() {
@@ -6099,7 +6110,7 @@ $(document).ready(function () {
     $("#tool-overlay").on("mousedown", canvas_mousedown);
     $("#tool-overlay").on("mousemove", canvas_mousemove);
     $("#tool-overlay").on("wheel", canvas_wheel);
-    $("body").on("mousemove", body_mousemove);
+    $("body").on("pointermove", body_mousemove);
     $("body").on("mouseup", body_mouseup);
     $("body").on("mouseleave", body_mouseup);
 
