@@ -132,6 +132,52 @@ li.mjs-nestedSortable-collapsed.mjs-nestedSortable-hovering div {
     margin-top:5px;
 }
 
+#stencil_list {
+    width: 142px;
+    max-height: 300px;
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    overflow-y: auto;
+}
+
+#stencil_list li {
+    margin: 0 3px 3px 3px;
+    padding: 0.4em;
+    font-size: 1.2em;
+    height: 18px;
+}
+
+.stencil-hidden {
+    background-color: #F7D2D0;
+}
+
+.custom-menu {
+    display: none;
+    z-index: 100000;
+    position: absolute;
+    overflow: hidden;
+    border: 1px solid #CCC;
+    white-space: nowrap;
+    font-family: sans-serif;
+    background: #FFF;
+    color: #333;
+    border-radius: 5px;
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+.custom-menu li {
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.custom-menu li:hover {
+    background-color: #DEF;
+}
+
 html * {
     user-select: none;
 }

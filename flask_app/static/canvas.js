@@ -31,8 +31,11 @@ var tick_callbacks = {};
 var layers = [];
 var audio_layers = [];
 var audio_entries = {};
+var stencils = [];
 var next_layer_key = 1;
 var current_layer = null;
+var current_stencil = null;
+var right_click_stencil_handle = null;
 var current_action = null;
 var current_project_filepath = null;
 
@@ -56,8 +59,11 @@ function resetGlobals() {
     layers = [];
     audio_layers = [];
     audio_entries = {};
+    stencils = [];
     next_layer_key = 1;
     current_layer = null;
+    current_stencil = null;
+    right_click_stencil_handle = null;
     current_action = null;
     current_project_filepath = null;
 }
@@ -69,9 +75,10 @@ function resetState() {
     // Reset all global variables.
     resetGlobals();
 
-    // Call update_layers and update_audio_layers to delete layer artifacts from the DOM.
+    // Call update_layers, update_audio_layers, and update_stencils to delete layer artifacts from the DOM.
     update_layers();
     update_audio_layers();
+    update_stencils();
 
     // Ensure that a tool is actually selected.
     $("input[type=radio][name=tool]:checked").change();
@@ -85,6 +92,7 @@ function resetState() {
 
 function serializeState() {
     // Package up all the global state we need.
+    // TODO add stencils.
     var state = {
         version: "0",
         layers: layers,
@@ -118,6 +126,9 @@ function deserializeState(state, project_filepath) {
     if ("audio_entries" in deserialized) {
         audio_entries = deserialized.audio_entries;
     }
+    if ("stencils" in deserialized) {
+        stencils = deserialized.stencils;
+    }
     current_seq_id = deserialized.current_seq_id;
     next_layer_key = deserialized.next_layer_key;
 
@@ -126,9 +137,10 @@ function deserializeState(state, project_filepath) {
         cb();
     }
 
-    // Run update_layers and update_audio_layers to update DOM.
+    // Run update_layers, update_audio_layers, and update_stencils to update DOM.
     update_layers();
     update_audio_layers();
+    update_stencils();
 }
 
 function setProjectFilepath(project_filepath) {
@@ -1621,6 +1633,23 @@ AudioLayer.prototype.get_visibility_at_time = function(time) {
 }
 
 // END AUDIOLAYER DEFINITION
+
+// START STENCIL DEFINITION
+
+function Stencil(title, id, image_url = null) {
+    this.id = "stencil-" + id;
+    this.title = title;
+    this.image = null;
+    if (image_url !== null) {
+        this.image = new Image;
+        this.image.src = image_url;
+    }
+    this.visible = true;
+}
+
+// TODO add serialization stuff.
+
+// END STENCIL DEFINITION
 
 // Don't call this directly. Call remove_events, and pass an array of one event.
 function remove_event_impl(event, buckets, arr) {
@@ -3918,6 +3947,12 @@ function get_scale_action() {
     }
 }
 
+function get_stencil_action() {
+    console.log("Generating stencil action");
+    // TODO generalize ViewportAction so it can feed its transforms to stencils as well as the viewport.
+    return new ViewportAction();
+}
+
 function get_rotate_action() {
     if ($("#rotate_and_scale_checkbox").is(":checked")) {
         return new TransformAction(rotate_and_scale, true, rotate_and_scale_filter);
@@ -3948,6 +3983,7 @@ var actions = [
     {key: "scale", title: "Scale", make_tool: get_scale_action},
     {key: "rotate", title: "Rotate", make_tool: get_rotate_action},
     {key: "viewport", title: "Viewport", make_tool: () => new ViewportAction()},
+    {key: "stencils", title: "Stencils", make_tool: get_stencil_action},
 ];
 
 // Hide/show handlers
@@ -5109,6 +5145,30 @@ function create_layer_handle(layer) {
     return element;
 }
 
+function create_stencil_handle(stencil) {
+    var element = $(`
+                    <li class="ui-state-default">
+                    <input type='radio' name='stencils-radio'>
+                    <span class='stencil-title'></span>
+                    </li>`);
+    element.attr('id', stencil.id);
+    element.find('.stencil-title').text(stencil.title);
+    element.find('input[name="stencils-radio"]').click(function() {
+        update_stencils();
+    });
+    // Set up custom right-click menu for stencils.
+    element.bind("contextmenu", function (event) {
+        event.preventDefault();
+        right_click_stencil_handle = this;
+        $("#stencil-menu").finish().toggle(100).css({
+            top: event.pageY + "px",
+            left: event.pageX + "px"
+        });
+    });
+
+    return element;
+}
+
 function create_audio_layer_handle(layer) {
     var element = $(`
                     <div class="layerhandle-contents audio-layer">
@@ -5137,6 +5197,14 @@ function get_layer_handles_in_order() {
     var hierarchy = $("#layer_selector").nestedSortable('toHierarchy', {startDepthCount: 0});
     var ids_in_order = [];
     get_layer_handles_in_order_helper(hierarchy, ids_in_order);
+    return ids_in_order;
+}
+
+function get_stencil_handles_in_order() {
+    var ids_in_order = [];
+    $("#stencil_list li").each(function (index, item) {
+        ids_in_order.push(item.id);
+    });
     return ids_in_order;
 }
 
@@ -5274,6 +5342,118 @@ function update_layers() {
                 .find("input[name='layerhandle-radio']").first()
                 .prop("checked", true);
         }
+    }
+}
+
+function update_stencils() {
+    var stencil_handle_ids = get_stencil_handles_in_order();
+    var in_order = [];
+
+    var claimed_stencil_ids = new Set();
+
+    // Re-sort stencils based on the order of the layer handles
+    for (var id of stencil_handle_ids) {
+        var index = stencils.findIndex(function(e) {
+            return e.id === id;
+        });
+        if (index !== -1) {
+            claimed_stencil_ids.add(stencils[index].id);
+            in_order.push(stencils[index]);
+            stencils.splice(index, 1);
+        } else {
+            // Handle deletes.
+            $("#" + id).remove();
+        }
+    }
+
+    // Add new stencils to the list.
+    for (var stencil of stencils) {
+        // Create and append the handle.
+        $("#stencil_list").append(create_stencil_handle(stencil));
+    }
+
+    stencils = in_order.concat(stencils);
+
+    // Handle renames
+    for (var stencil of stencils) {
+        $("#" + stencil.id).find(".stencil-title").text(stencil.title);
+    }
+
+    // Handle visibility colouring
+    for (var stencil of stencils) {
+        if (stencil.visible) {
+            $("#" + stencil.id).removeClass("stencil-hidden");
+        } else {
+            $("#" + stencil.id).addClass("stencil-hidden");
+        }
+    }
+
+    // Now, the rest is about selecting stencils. If there are no stencils, just leave.
+    if (stencils.length === 0) {
+        current_stencil = null;
+        return;
+    }
+
+    // If the current stencil was deleted, clear selection
+    if (stencils.indexOf(current_stencil) === -1) {
+        current_stencil = null;
+    }
+
+    var selected = $("#stencil_list input[name='stencils-radio']:checked");
+
+    // Now there are two cases:
+    if (selected.length > 0) {
+        // Change the selection
+        var id = selected.closest("li").attr("id");
+        for (var stencil of stencils) {
+            if (stencil.id === id) {
+                current_stencil = stencil;
+                break;
+            }
+        }
+    } else {
+        // If no element is selected, select the first one
+        current_stencil = stencils[0];
+        $("#" + current_stencil.id)
+            .find("input[name='stencils-radio']")
+            .prop("checked", true);
+    }
+}
+
+function delete_stencil_by_id(id) {
+    for (var i = 0; i < stencils.length; i++) {
+        if (stencils[i].id === id) {
+            stencils.splice(i, 1);
+            break;
+        }
+    }
+    update_stencils();
+}
+
+function toggle_stencil_visibility_by_id(id) {
+    for (var stencil of stencils) {
+        if (stencil.id === id) {
+            stencil.visible = !stencil.visible;
+            break;
+        }
+    }
+    update_stencils();
+}
+
+function handle_stencil_action(stencil_handle, action) {
+    if (stencil_handle === null) {
+        return;
+    }
+    switch (action) {
+    case "toggle-stencil-visibility":
+        toggle_stencil_visibility_by_id(stencil_handle.id);
+        break;
+    case "rename-stencil":
+        console.log("TODO implement rename stencil for " + stencil_handle.id);
+        break;
+    case "delete-stencil":
+        delete_stencil_by_id(stencil_handle.id);
+        break;
     }
 }
 
@@ -5950,6 +6130,23 @@ $(document).ready(function () {
     $("#font_selector").fontpicker();
     $("#translation_direction_selection input").checkboxradio({ icon: false });
     $("#scale_direction_selection input").checkboxradio({ icon: false });
+    $("#stencil_list").sortable({
+        stop: function() {
+            update_stencils();
+        },
+    });
+    $("#stencil_list").disableSelection();
+    // Set up some stuff for the stencil right-click menu.
+    $("#stencil_list").bind("mousedown", function (e) {
+        right_click_stencil_handle = null;
+        $("#stencil-menu").hide(100);
+    });
+    $("#stencil-menu li").click(function(){
+        var action = this.id;
+        handle_stencil_action(right_click_stencil_handle, action);
+        right_click_stencil_handle = null;
+        $("#stencil-menu").hide();
+    });
 
     // Keystrokes
     $("body").on("keydown", function(e) {
@@ -5994,6 +6191,14 @@ $(document).ready(function () {
     });
     $( "#layer_selector" ).disableSelection();
     update_layers();
+
+    // Create the stencils.
+    stencils.push(new Stencil("Item 1", 1));
+    stencils.push(new Stencil("Item 2", 2));
+    stencils.push(new Stencil("Item 3", 3));
+    stencils.push(new Stencil("Item 4", 4));
+    stencils.push(new Stencil("Item 5", 5));
+    update_stencils();
 
     // Paint the background
     var ctx = document.getElementById("background").getContext("2d");
