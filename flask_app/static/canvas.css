@@ -66,9 +66,9 @@ li.mjs-nestedSortable-collapsed.mjs-nestedSortable-hovering div {
 .audio-layer .layer-title {
     margin-left: 25px;
 }
-#rename-layer label, #rename-layer input { display:block; }
-#rename-layer input.text { margin-bottom:0px; width:95%; padding: .4em; }
-#rename-layer fieldset { padding:0; border:0; margin-top:10px; }
+#rename-item label, #rename-item input { display:block; }
+#rename-item input.text { margin-bottom:0px; width:95%; padding: .4em; }
+#rename-item fieldset { padding:0; border:0; margin-top:10px; }
 .error-message {
   border-radius: 10px;
   border: 2px solid #FF0000;

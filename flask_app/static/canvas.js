@@ -4015,34 +4015,42 @@ function add_visibility_event(layer, action) {
 
 // TODO: figure out proper encapsulation
 // TODO: error handling
-[make_rename_dialog, begin_rename_layer] = (function() {
+[make_rename_dialog, begin_rename_item] = (function() {
     var rename_dialog = null;
-    var current_rename_layer = null;
-    function begin_rename_layer(layer) {
+    var current_rename_item = null;
+    var current_collision_checker = null;
+    var current_callback = null;
+    function begin_rename_item(item, name_collision_checker, callback) {
         $("#rename-error-message").css("visibility", "hidden");
-        current_rename_layer = layer;
-        $("#layer-rename-name").val(layer.title);
+        current_rename_item = item;
+        current_collision_checker = name_collision_checker;
+        current_callback = callback;
+        $("#rename-item-name").val(item.title);
         rename_dialog.dialog("open");
     }
-    function maybe_end_rename_layer() {
-        var name = $("#layer-rename-name").val();
-        if (layer_name_taken(name) && current_rename_layer.title !== name) {
+    function maybe_end_rename_item() {
+        var name = $("#rename-item-name").val();
+        if (current_collision_checker !== null &&
+            current_collision_checker(name) &&
+            current_rename_item.title !== name) {
             $("#rename-error-message").css("visibility", "visible");
         } else {
-            current_rename_layer.title = name;
+            current_rename_item.title = name;
             rename_dialog.dialog("close");
-            update_layers();
+            if (current_callback !== null) {
+                current_callback(current_rename_item, name);
+            }
         }
     }
 
     function make_rename_dialog() {
-        rename_dialog = $( "#rename-layer" ).dialog({
+        rename_dialog = $( "#rename-item" ).dialog({
             autoOpen: false,
             height: 230,
             width: 500,
             modal: true,
             buttons: {
-                "Ok": maybe_end_rename_layer,
+                "Ok": maybe_end_rename_item,
                 "Cancel": function() {
                     rename_dialog.dialog( "close" );
                 }
@@ -4051,13 +4059,13 @@ function add_visibility_event(layer, action) {
 
         rename_dialog.find( "form" ).on( "submit", function( event ) {
             event.preventDefault();
-            return maybe_end_rename_layer();
+            return maybe_end_rename_item();
         });
 
         return rename_dialog;
     }
 
-    return [make_rename_dialog, begin_rename_layer];
+    return [make_rename_dialog, begin_rename_item];
 })();
 
 // TODO: figure out proper encapsulation
@@ -5143,7 +5151,7 @@ function create_layer_handle(layer) {
     element.find('.layer-title').text(layer.title);
     element.find('input[name="layerhandle-radio"]').click(update_layers);
     element.find('.layer-rename').click(function() {
-        begin_rename_layer(layer);
+        begin_rename_item(layer, layer_name_taken, update_layers);
     })
     element.find('.layer-delete').click(function() {
         delete_layer(layer);
@@ -5441,13 +5449,8 @@ function delete_stencil_by_id(id) {
     update_stencils();
 }
 
-function toggle_stencil_visibility_by_id(id) {
-    for (var stencil of stencils) {
-        if (stencil.id === id) {
-            stencil.visible = !stencil.visible;
-            break;
-        }
-    }
+function toggle_stencil_visibility(stencil) {
+    stencil.visible = !stencil.visible;
     update_stencils();
 }
 
@@ -5457,10 +5460,12 @@ function handle_stencil_action(stencil_handle, action) {
     }
     switch (action) {
     case "toggle-stencil-visibility":
-        toggle_stencil_visibility_by_id(stencil_handle.id);
+        toggle_stencil_visibility(get_stencil_by_id(stencil_handle.id));
         break;
     case "rename-stencil":
-        console.log("TODO implement rename stencil for " + stencil_handle.id);
+        begin_rename_item(get_stencil_by_id(stencil_handle.id),
+                          stencil_name_taken,
+                          update_stencils);
         break;
     case "delete-stencil":
         delete_stencil_by_id(stencil_handle.id);
@@ -5471,6 +5476,15 @@ function handle_stencil_action(stencil_handle, action) {
 function layer_name_taken(name) {
     for (var layer of layers) {
         if (layer.title === name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function stencil_name_taken(name) {
+    for (var stencil of stencils) {
+        if (stencil.title === name) {
             return true;
         }
     }
@@ -6097,6 +6111,15 @@ function get_layer_by_id(id) {
         }
     }
     throw "Layer not found: " + id;
+}
+
+function get_stencil_by_id(id) {
+    for (var stencil of stencils) {
+        if (stencil.id === id) {
+            return stencil;
+        }
+    }
+    throw "Stencil not found: " + id;
 }
 
 $(document).ready(function () {
