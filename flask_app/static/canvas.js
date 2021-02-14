@@ -33,6 +33,7 @@ var audio_layers = [];
 var audio_entries = {};
 var stencils = [];
 var next_layer_key = 1;
+var next_stencil_key = 1;
 var current_layer = null;
 var current_stencil = null;
 var right_click_stencil_handle = null;
@@ -61,6 +62,7 @@ function resetGlobals() {
     audio_entries = {};
     stencils = [];
     next_layer_key = 1;
+    next_stencil_key = 1;
     current_layer = null;
     current_stencil = null;
     right_click_stencil_handle = null;
@@ -100,6 +102,7 @@ function serializeState() {
         audio_entries: audio_entries,
         current_seq_id: current_seq_id,
         next_layer_key: next_layer_key,
+        next_stencil_key: next_stencil_key,
     };
 
     // Serialize it.
@@ -131,6 +134,9 @@ function deserializeState(state, project_filepath) {
     }
     current_seq_id = deserialized.current_seq_id;
     next_layer_key = deserialized.next_layer_key;
+    if ("next_stencil_key" in deserialized) {
+        next_stencil_key = deserialized.next_stencil_key;
+    }
 
     // Run reviver callbacks.
     for (var cb of cbs) {
@@ -4072,7 +4078,9 @@ function add_visibility_event(layer, action) {
 // TODO: error handling and stuff
 [make_image_dialog, begin_add_image] = (function() {
     var image_dialog = null;
-    function begin_add_image() {
+    var current_callback = null;
+    function begin_add_image(callback) {
+        current_callback = callback;
         image_dialog.dialog("open");
     }
     function end_add_image() {
@@ -4084,7 +4092,9 @@ function add_visibility_event(layer, action) {
 
             reader.onload = function(e) {
                 var data_url = e.target.result;
-                new_layer(null, data_url);
+                if (current_callback !== null) {
+                    current_callback(data_url);
+                }
             }
 
             reader.readAsDataURL(input.files[0]);
@@ -5500,6 +5510,15 @@ function new_layer(event, image_data_url = null) {
     update_layers();
 }
 
+function new_stencil(image_data_url) {
+    while (stencil_name_taken("Stencil " + next_stencil_key)) {
+        next_stencil_key++;
+    }
+    stencils.push(new Stencil("Stencil " + next_stencil_key, next_stencil_key, image_data_url));
+    next_stencil_key++;
+    update_stencils();
+}
+
 function get_layer_descendants_helper(layer, descendants) {
     descendants.push(layer);
     for (var child of layer.children) {
@@ -6146,7 +6165,10 @@ $(document).ready(function () {
     $("#save_project_as").on("click", begin_save_as_dialog);
     $("#open_project").on("click", begin_open_dialog);
     $("#new_layer").on("click", new_layer);
-    $("#new_image").on("click", begin_add_image);
+    $("#new_image").on("click", function() {
+        var callback = function(data_url) { new_layer(null, data_url); };
+        begin_add_image(callback);
+    });
     $("#reset_viewport").on("click", function() { viewport_matrix = getIdentityMatrix(); });
 
     // Toolset
@@ -6168,6 +6190,10 @@ $(document).ready(function () {
         stop: function() {
             update_stencils();
         },
+    });
+    $("#new_stencil").on("click", function() {
+        var callback = function(data_url) { new_stencil(data_url); };
+        begin_add_image(callback);
     });
     $("#stencil_list").disableSelection();
     // Set up some stuff for the stencil right-click menu.
@@ -6227,11 +6253,6 @@ $(document).ready(function () {
     update_layers();
 
     // Create the stencils.
-    stencils.push(new Stencil("Item 1", 1));
-    stencils.push(new Stencil("Item 2", 2));
-    stencils.push(new Stencil("Item 3", 3));
-    stencils.push(new Stencil("Item 4", 4));
-    stencils.push(new Stencil("Item 5", 5));
     update_stencils();
 
     // Paint the background
