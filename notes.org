@@ -194,10 +194,10 @@
 **** E.g. drawing tools snap to grid lines or lattice points.
 **** E.g. transformations can tell when you start near a line or lattice point and snap to the same offset on other lines or lattice points. Maybe this only applies to "smooth" transformations, where begin and end are the only thing that matter.
 * UI Ideas
-** TODO Move all tools to right side of canvas
-** TODO Instead of having a small radio button beside each tool, enclose the full tool name in a button (similar to text alignment UI).
-** TODO Put all additional tool options on the right side of canvas as well, either beside or below the main tool selection.
-** TODO Hide/show additional tool options (stroke color & size, font options, table options, apply transforms to events checkbox, etc) as appropriate based on what tool is selected.
+** DONE Move all tools to right side of canvas
+** DONE Instead of having a small radio button beside each tool, enclose the full tool name in a button (similar to text alignment UI).
+** DONE Put all additional tool options on the right side of canvas as well, either beside or below the main tool selection.
+** DONE Hide/show additional tool options (stroke color & size, font options, table options, apply transforms to events checkbox, etc) as appropriate based on what tool is selected.
 * Sound Recording
 ** DONE Figure out HOW
 ** DONE Implement recording proof-of-concept
