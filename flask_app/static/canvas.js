@@ -1645,6 +1645,7 @@ AudioLayer.prototype.get_visibility_at_time = function(time) {
 function Stencil(title, id, image_url = null) {
     this.id = "stencil-" + id;
     this.title = title;
+    this.matrix = getIdentityMatrix();
     this.image = null;
     if (image_url !== null) {
         this.image = new Image;
@@ -5324,25 +5325,12 @@ function update_layers() {
         $("#" + layer.handle_id).find(".layer-title").first().text(layer.title);
     }
 
-    // Reorder the actual canvas elements
-    for (var i = 0; i < layers.length; i++) {
-        $(layers[i].canvas).css("z-index", layers.length-i);
-    }
-    $("#viewport-overlay").css("z-index", layers.length+1);
-    $("#tool-overlay").css("z-index", layers.length+2);
-
     // Resize the timeline (since there is more/less space available if the maximum
     // nesting level descreased/increased).
     resize_timelines();
 
-    // Now, the rest is about selecting layers. If there are no layers, just leave.
-    if (layers.length === 0) {
-        current_layer = null;
-        return;
-    }
-
-    // If the current layer was deleted, clear selection
-    if (layers.indexOf(current_layer) === -1) {
+    // Reset selection if there are no more layers or if the current layer was deleted.
+    if (layers.length === 0 || layers.indexOf(current_layer) === -1) {
         current_layer = null;
     }
 
@@ -5361,10 +5349,12 @@ function update_layers() {
     } else {
         if (current_layer === null) {
             // If no element is selected, select the first one
-            current_layer = layers[0];
-            $("#" + current_layer.handle_id)
-                .find("input[name='layerhandle-radio']").first()
-                .prop("checked", true);
+            if (layers.length > 0) {
+                current_layer = layers[0];
+                $("#" + current_layer.handle_id)
+                    .find("input[name='layerhandle-radio']").first()
+                    .prop("checked", true);
+            }
         } else { // current_layer !== null
             // Checkbox was unset by a move. Reset it.
             $("#" + current_layer.handle_id)
@@ -5372,6 +5362,29 @@ function update_layers() {
                 .prop("checked", true);
         }
     }
+
+
+    // Reorder the actual canvas elements
+    var z_index = 1;
+    for (var i = layers.length - 1; i >= 0; i--) {
+        var layer = layers[i];
+        if (layer === current_layer) {
+            // Place the stencil overlay right undernearth the currently-selected layer.
+            $("#stencil-overlay").css("z-index", z_index);
+            ++z_index;
+        }
+        $(layer.canvas).css("z-index", z_index);
+        ++z_index;
+    }
+
+    // Place all the "special" layers, including the stencil layer if that has not already been placed.
+    if (current_layer === null) {
+        $("#stencil-overlay").css("z-index", z_index);
+        ++z_index;
+    }
+    $("#viewport-overlay").css("z-index", z_index);
+    ++z_index;
+    $("#tool-overlay").css("z-index", z_index);
 }
 
 function update_stencils() {
@@ -5417,14 +5430,8 @@ function update_stencils() {
         }
     }
 
-    // Now, the rest is about selecting stencils. If there are no stencils, just leave.
-    if (stencils.length === 0) {
-        current_stencil = null;
-        return;
-    }
-
-    // If the current stencil was deleted, clear selection
-    if (stencils.indexOf(current_stencil) === -1) {
+    // Reset selection if there are no more stencils or if the current selection was deleted.
+    if (stencils.length === 0 || stencils.indexOf(current_stencil) === -1) {
         current_stencil = null;
     }
 
@@ -5440,12 +5447,32 @@ function update_stencils() {
                 break;
             }
         }
-    } else {
+    } else if (stencils.length > 0) {
         // If no element is selected, select the first one
         current_stencil = stencils[0];
         $("#" + current_stencil.id)
             .find("input[name='stencils-radio']")
             .prop("checked", true);
+    }
+
+    // Finally, redraw the stencils.
+    redraw_stencils();
+}
+
+function redraw_stencils() {
+    // Get the stencil canvas context.
+    var canvas = $("#stencil-overlay").get(0);
+    var ctx = canvas.getContext("2d");
+
+    // Clear the canvas.
+    ctx.resetTransform();
+    ctx.clearRect(0, 0, 1280, 720);
+
+    // Draw each of the stencils, from bottom to top.
+    for (var i = stencils.length - 1; i >= 0; i--) {
+        var m = stencils[i].matrix;
+        ctx.setTransform(m.a, m.b, m.c, m.d, m.e, m.f);
+        ctx.drawImage(stencils[i].image, 0, 0);
     }
 }
 
