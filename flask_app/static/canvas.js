@@ -5488,9 +5488,13 @@ function redraw_stencils() {
 
     // Draw each of the stencils, from bottom to top.
     for (var i = stencils.length - 1; i >= 0; i--) {
-        var m = stencils[i].matrix;
+        var stencil = stencils[i];
+        if (!stencil.visible) {
+            continue;
+        }
+        var m = stencil.matrix;
         ctx.setTransform(m.a, m.b, m.c, m.d, m.e, m.f);
-        ctx.drawImage(stencils[i].image, 0, 0);
+        ctx.drawImage(stencil.image, 0, 0);
     }
 }
 
