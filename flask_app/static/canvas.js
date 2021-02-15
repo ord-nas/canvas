@@ -3281,9 +3281,33 @@ TransformEventSink.prototype.process = function(matrix) {
 
 TransformEventSink.prototype.invert_through_self_transform = true;
 
-// VIEWPORT ACTION
+// TRANSFORM VIEWPORT SINK
 
-function ViewportAction(safety_margin = 5, scale_per_pixel = 0.01) {
+function TransformViewportSink() {
+    // No properties to set!
+}
+
+TransformViewportSink.prototype.process = function(matrix) {
+    viewport_matrix = matrix.multiply(viewport_matrix);
+}
+
+// TRANSFORM STENCIL SINK
+
+function TransformStencilSink() {
+    // No properties to set!
+}
+
+TransformStencilSink.prototype.process = function(matrix) {
+    if (current_stencil !== null) {
+        current_stencil.matrix = matrix.multiply(current_stencil.matrix);
+        redraw_stencils();
+    }
+}
+
+// PANZOOMROTATE ACTION
+
+function PanZoomRotateAction(sink, safety_margin = 5, scale_per_pixel = 0.01) {
+    this.transform_sink = sink;
     this.safety_margin = safety_margin;
     this.scale_per_pixel = 0.003;
 
@@ -3299,7 +3323,7 @@ function ViewportAction(safety_margin = 5, scale_per_pixel = 0.01) {
     this.current_filter = null;
 }
 
-ViewportAction.prototype.mouseup = function(event) {
+PanZoomRotateAction.prototype.mouseup = function(event) {
     this.initial_point = null;
     this.last_point = null;
     this.current_point = null;
@@ -3308,7 +3332,7 @@ ViewportAction.prototype.mouseup = function(event) {
     this.current_filter = null;
 };
 
-ViewportAction.prototype.mousedown = function(event) {
+PanZoomRotateAction.prototype.mousedown = function(event) {
     if (this.current_action === null) {
         var pnt = getMousePos(event)
         var canvas = document.getElementById("tool-overlay");
@@ -3336,7 +3360,7 @@ ViewportAction.prototype.mousedown = function(event) {
     }
 };
 
-ViewportAction.prototype.mousemove = function(event) {
+PanZoomRotateAction.prototype.mousemove = function(event) {
     if (this.current_action !== null) {
         var pnt = getMousePos(event);
 
@@ -3352,11 +3376,11 @@ ViewportAction.prototype.mousemove = function(event) {
                                             this.initial_point,
                                             this.last_point,
                                             this.current_point);
-        viewport_matrix = transform.multiply(viewport_matrix);
+        this.transform_sink.process(transform);
     }
 };
 
-ViewportAction.prototype.wheel = function(event) {
+PanZoomRotateAction.prototype.wheel = function(event) {
     if (event.originalEvent.deltaMode != 0) {
         console.log("ERROR: wheel event with non pixel deltaMode");
         return;
@@ -3366,10 +3390,10 @@ ViewportAction.prototype.wheel = function(event) {
     var pnt = getMousePos(event);
     var scale_amount = Math.pow(1 - this.scale_per_pixel, event.originalEvent.deltaY);
     var scale_matrix = matrixMaker.scaleAbout(pnt.x, pnt.y, scale_amount, scale_amount);
-    viewport_matrix = scale_matrix.multiply(viewport_matrix);
+    this.transform_sink.process(scale_matrix);
 }
 
-ViewportAction.prototype.finish = function() {
+PanZoomRotateAction.prototype.finish = function() {
     this.mouseup();
     /* var ctx = document.getElementById("tool-overlay").getContext("2d");
        ctx.clearRect(0, 0, 1280, 720);
@@ -3377,7 +3401,7 @@ ViewportAction.prototype.finish = function() {
     $("#tool-overlay").off("contextmenu");
 }
 
-ViewportAction.prototype.start = function() {
+PanZoomRotateAction.prototype.start = function() {
     $("#tool-overlay").on("contextmenu", function(event) {
         event.preventDefault();
     });
@@ -3388,7 +3412,7 @@ ViewportAction.prototype.start = function() {
     this.current_filter = null;
 }
 
-ViewportAction.prototype.tick = function() { /* do nothing */ }
+PanZoomRotateAction.prototype.tick = function() { /* do nothing */ }
 
 // TRANSFORM ACTION
 
@@ -3965,12 +3989,6 @@ function get_scale_action() {
     }
 }
 
-function get_stencil_action() {
-    console.log("Generating stencil action");
-    // TODO generalize ViewportAction so it can feed its transforms to stencils as well as the viewport.
-    return new ViewportAction();
-}
-
 function get_rotate_action() {
     if ($("#rotate_and_scale_checkbox").is(":checked")) {
         return new TransformAction(rotate_and_scale, true, rotate_and_scale_filter);
@@ -4000,8 +4018,8 @@ var actions = [
     {key: "translate", title: "Translate", make_tool: get_translate_action},
     {key: "scale", title: "Scale", make_tool: get_scale_action},
     {key: "rotate", title: "Rotate", make_tool: get_rotate_action},
-    {key: "viewport", title: "Viewport", make_tool: () => new ViewportAction()},
-    {key: "stencils", title: "Stencils", make_tool: get_stencil_action},
+    {key: "viewport", title: "Viewport", make_tool: () => new PanZoomRotateAction(new TransformViewportSink())},
+    {key: "stencils", title: "Stencils", make_tool: () => new PanZoomRotateAction(new TransformStencilSink())},
 ];
 
 // Hide/show handlers
