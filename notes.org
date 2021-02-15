@@ -174,18 +174,18 @@
 ** TODO View/edit properties of an event
 *** TODO Edit points of drawing events (specifically for non-Stroke events)
 ** TODO Adjust playback speed (faster or slower)
-** TODO Stencils
+** DONE Stencils
 *** This would be a image-layer-like thing that doesn't have a timeline
 *** You can toggle its visibility, but it never appears in the exported video
 *** You can transform it around
 *** The idea is that you trace over it - it helps you draw better
 *** UI
-**** TODO Should these go in the layer list, or be separate?
+**** DONE Should these go in the layer list, or be separate?
 ***** Currently thinking separate
 **** TODO Probably have option to adjust opacity?
-**** TODO Need some kind of ordering ability, since you want it to be on top of most layers, but underneath the layer you are drawing onto ... maybe they are always "just under" the currently selected layer?
+**** DONE Need some kind of ordering ability, since you want it to be on top of most layers, but underneath the layer you are drawing onto ... maybe they are always "just under" the currently selected layer?
 ***** This isn't ideal, since the current layer may already have stuff on it, and ideally you'd like it to be above the current stuff, but under the stuff you add when you trace over it ... hmm
-**** TODO Need to have some UI for transforming them ... possibly handle this like selected-stroke-event transforms?
+**** DONE Need to have some UI for transforming them ... possibly handle this like selected-stroke-event transforms?
 ** TODO Grid lines
 *** Overlay some grid.
 *** "Grid" can also just be arbitrary horizontal and vertical reference lines.

@@ -94,12 +94,12 @@ function resetState() {
 
 function serializeState() {
     // Package up all the global state we need.
-    // TODO add stencils.
     var state = {
         version: "0",
         layers: layers,
         audio_layers: audio_layers,
         audio_entries: audio_entries,
+        stencils: stencils,
         current_seq_id: current_seq_id,
         next_layer_key: next_layer_key,
         next_stencil_key: next_stencil_key,
@@ -1654,7 +1654,23 @@ function Stencil(title, id, image_url = null) {
     this.visible = true;
 }
 
-// TODO add serialization stuff.
+Stencil.prototype.expected_properties = new Set([
+    "id", "title", "matrix", "image", "visible",
+]);
+
+Stencil.prototype.toJSON = makeJSONEncoder({
+    // Properties to transform to a wire-safe format (need to be converted back after deserialize).
+    matrix: serialize_matrix,
+    image: (image => image.src),
+});
+
+Stencil.prototype.reifyFromJSON = function() {
+    // Map these properties back to their proper format.
+    this.matrix = deserialize_matrix(this.matrix);
+    var src = this.image;
+    this.image = new Image;
+    this.image.src = src;
+}
 
 // END STENCIL DEFINITION
 
