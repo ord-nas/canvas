@@ -6039,7 +6039,9 @@ ExportManager.prototype.get_current_frame_data = function() {
     // Pull out the set of relevant layers.
     var layers_to_collapse = []
     $("#layer_set canvas").each(function(index, element) {
-        if (element.id === "viewport-overlay" || element.id === "tool-overlay") return;
+        if (element.id === "viewport-overlay" ||
+            element.id === "tool-overlay" ||
+            element.id === "stencil-overlay") return;
         if ($(element).css("visibility") === "hidden") return;
         var z_index = $(element).css("z-index");
         layers_to_collapse.push({
