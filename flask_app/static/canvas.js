@@ -1826,14 +1826,21 @@ function findTransformMatrix(layer) {
 }
 
 function clear(layer, draw_background = true) {
+    var fully_loaded = true;
     var ctx = layer.ctx;
     var m = ctx._matrix;
     ctx.resetTransform();
     ctx.clearRect(0, 0, 1280, 720);
     ctx.setMatrix(m);
     if (draw_background && layer.background_image !== null) {
-        ctx.drawImage(layer.background_image, 0, 0);
+        if (layer.background_image.complete) {
+            ctx.drawImage(layer.background_image, 0, 0);
+        } else  {
+            console.log("WARNING: background image not loaded yet!");
+            fully_loaded = false;
+        }
     }
+    return fully_loaded;
 }
 
 function compare_events(a, b) {
@@ -2089,17 +2096,23 @@ function standard_draw(layer) {
     if (!matrix_equals(viewport_matrix, layer.last_viewport_matrix)) {
         transform_changed = true;
     }
+    var background_loaded = true;
     if (always_clear ||
         layer.last_draw === null ||
         compare_events(now, layer.last_draw) < 0 ||
         transform_changed) {
         console.log("CLEAR (STANDARD)");
-        clear(layer);
+        background_loaded = clear(layer);
         drawPeriod(0, now, layer);
     } else {
         drawPeriod(layer.last_draw, now, layer);
     }
-    layer.last_draw = now;
+    if (background_loaded) {
+        layer.last_draw = now;
+    } else {
+        // Since the background isn't loaded yet, we need to redraw again later.
+        layer.last_draw = null;
+    }
     layer.last_transform = now;
     layer.last_viewport_matrix = matrix_clone(viewport_matrix);
     // Do this just to leave layer.temp_canvas in a state that
@@ -2131,13 +2144,14 @@ function post_transform_draw(layer) {
     $(layer.canvas).css("visibility", "visible");
     var temp_canvas = layer.get_temp_canvas();
     var temp_ctx = temp_canvas.getContext("2d");
+    var background_loaded = true;
     if (layer.last_draw === null || compare_events(now, layer.last_draw) < 0 ||
         layer.last_transform === null || compare_events(now, layer.last_transform) < 0) {
         console.log("RESET TRANSFORM & DRAW (POST)");
         layer.resetTransform();
         transformPeriod(0, now, layer);
         console.log("CLEAR (POST)");
-        clear(layer);
+        background_loaded = clear(layer);
         drawPeriod(0, now, layer);
         layer.reset_temp_canvas();
         layer.last_transform = now;
@@ -2155,7 +2169,12 @@ function post_transform_draw(layer) {
         layer.ctx.setMatrix(old_m);
         layer.matrices = old_matrices;
     }
-    layer.last_draw = now;
+    if (background_loaded) {
+        layer.last_draw = now;
+    } else {
+        // Since the background isn't loaded yet, we need to redraw again later.
+        layer.last_draw = null;
+    }
 }
 
 function draw(layer) {
@@ -5503,14 +5522,26 @@ function redraw_stencils() {
     ctx.clearRect(0, 0, 1280, 720);
 
     // Draw each of the stencils, from bottom to top.
+    var all_images_loaded = true;
     for (var i = stencils.length - 1; i >= 0; i--) {
         var stencil = stencils[i];
         if (!stencil.visible) {
             continue;
         }
+        // If the stencil image is not fully loaded, skip it for now.
+        if (!stencil.image.complete) {
+            console.log("WARNING: Stencil image MISSING!");
+            all_images_loaded = false;
+            continue;
+        }
         var m = stencil.matrix;
         ctx.setTransform(m.a, m.b, m.c, m.d, m.e, m.f);
         ctx.drawImage(stencil.image, 0, 0);
+    }
+
+    // If we are missing some images, set a timeout to try again later.
+    if (!all_images_loaded) {
+        setTimeout(redraw_stencils, 100);
     }
 }
 
