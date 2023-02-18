@@ -1,6 +1,6 @@
 How to access webserver running in Ubuntu VM from host machine.
 
-1) Make Ubuntu IP address static.
+1A) Make Ubuntu IP address static.
 
 Followed instructions here: https://linuxconfig.org/how-to-configure-static-ip-address-on-ubuntu-18-10-cosmic-cuttlefish-linux
 
@@ -15,6 +15,23 @@ Netmask: 24
 Gateway: 192.168.200.2
 DNS Servers: 192.168.200.2
 
-2) Start up webserver on Ubuntu (e.g. on port 8080).
+1B) Keep default of automatic IP address, but look up the IP address assigned when you boot the VM.
 
-3) Then just visit 192.168.200.183:8080.
+Network icon in top right > Wired connection > Wired Settings > Wired "gearbox icon" > Details > IPv4 Address
+
+Suppose it's 192.168.200.183
+
+2) Start up webserver on Ubuntu.
+
+$ cd flask_app
+$ ./start_flash.sh
+
+3) The server should start on localhost, with an address like https://0.0.0.0:5000/
+
+On the host machine, substitute the VM's IPv4 address, keep the port, and *keep the https*.
+
+Proceed past your browser's warning about invalid certificate (oops).
+
+E.g. visit https://192.168.200.183:5000/
+
+Project main page would then be at https://192.168.200.183:5000/static/canvas.html
